@@ -3,4 +3,4 @@ resolver = "2"
 members = [ "solutions/*" ]
 
 [workspace.dependencies]
-aoclib = { git = "https://github.com/UncleScientist/aoclib-rs.git" }
+aoclib = { git = "https://github.com/UncleScientist/aoclib-rs" }
