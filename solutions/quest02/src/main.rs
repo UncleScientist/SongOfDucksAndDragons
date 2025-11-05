@@ -32,6 +32,19 @@ fn main() {
         x += 10;
     }
     println!("part 2 = {total_points}");
+
+    let lines = aoclib::read_lines("input/everybody_codes_e2025_q02_p2.txt");
+    // let lines = aoclib::read_lines("input/test_3.txt");
+    let start: Complex = lines[0][2..].parse().unwrap();
+    let mut total_points = 0;
+    for x in start.0..=start.0 + 1000 {
+        for y in start.1..=start.1 + 1000 {
+            if part2_cycle(&Complex(x, y)) {
+                total_points += 1;
+            }
+        }
+    }
+    println!("part 3 = {total_points}");
 }
 
 fn part1_cycle(c: &Complex, addend: &Complex) -> Complex {
