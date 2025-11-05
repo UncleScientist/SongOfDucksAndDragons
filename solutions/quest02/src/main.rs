@@ -4,22 +4,55 @@ use std::{
     str::FromStr,
 };
 
-const DIVISOR: Complex = Complex(10, 10);
+const PART1_DIVISOR: Complex = Complex(10, 10);
+const PART2_DIVISOR: Complex = Complex(100000, 100000);
 
 fn main() {
     let lines = aoclib::read_lines("input/everybody_codes_e2025_q02_p1.txt");
     let addend = lines[0][2..].parse().unwrap();
     let mut result = Complex(0, 0);
     for _ in 0..3 {
-        result = cycle(&result, &addend);
+        result = part1_cycle(&result, &addend);
     }
     println!("part 1 = {result}");
+
+    let lines = aoclib::read_lines("input/everybody_codes_e2025_q02_p2.txt");
+    // let lines = aoclib::read_lines("input/test_2.txt");
+    let start: Complex = lines[0][2..].parse().unwrap();
+    let mut x = start.0;
+    let mut total_points = 0;
+    while x <= start.0 + 1000 {
+        let mut y = start.1;
+        while y <= start.1 + 1000 {
+            if part2_cycle(&Complex(x, y)) {
+                total_points += 1;
+            }
+            y += 10;
+        }
+        x += 10;
+    }
+    println!("part 2 = {total_points}");
 }
 
-fn cycle(c: &Complex, addend: &Complex) -> Complex {
+fn part1_cycle(c: &Complex, addend: &Complex) -> Complex {
     let mut num = *c * *c;
-    num = num / DIVISOR;
+    num = num / PART1_DIVISOR;
     num + *addend
+}
+
+fn part2_cycle(start: &Complex) -> bool {
+    let mut result = Complex(0, 0);
+    for _ in 0..100 {
+        result = result * result;
+        result = result / PART2_DIVISOR;
+        result = result + *start;
+
+        if result.0 > 1000000 || result.1 > 1000000 || result.0 < -1000000 || result.1 < -1000000 {
+            return false;
+        }
+    }
+
+    true
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
