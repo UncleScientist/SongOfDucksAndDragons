@@ -6,27 +6,32 @@ fn main() {
         .split(',')
         .map(|num| num.parse::<usize>().unwrap())
         .collect::<Vec<_>>();
+    println!("part 1 = {}", calc_quality(&nums));
+}
+
+fn calc_quality(nums: &[usize]) -> usize {
     let mut sword: Vec<Element> = Vec::new();
     let mut part1 = String::new();
     for n in nums {
         let mut found = false;
         for s in &mut sword {
-            if n < s.spine && s.left.is_none() {
-                s.left = Some(n);
+            if *n < s.spine && s.left.is_none() {
+                s.left = Some(*n);
                 found = true;
                 break;
-            } else if n > s.spine && s.right.is_none() {
-                s.right = Some(n);
+            } else if *n > s.spine && s.right.is_none() {
+                s.right = Some(*n);
                 found = true;
                 break;
             }
         }
         if !found {
-            sword.push(Element::add(n));
+            sword.push(Element::add(*n));
             part1.push_str(format!("{n}").as_str());
         }
     }
-    println!("part 1 = {part1}");
+
+    part1.parse().unwrap()
 }
 
 #[derive(Debug, Default)]
