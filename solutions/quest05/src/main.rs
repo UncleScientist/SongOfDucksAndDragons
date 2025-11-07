@@ -7,6 +7,22 @@ fn main() {
         .map(|num| num.parse::<usize>().unwrap())
         .collect::<Vec<_>>();
     println!("part 1 = {}", calc_quality(&nums));
+
+    // let lines = aoclib::read_lines("input/test_2.txt");
+    let lines = aoclib::read_lines("input/everybody_codes_e2025_q05_p2.txt");
+    let mut min = usize::MAX;
+    let mut max = 0;
+    for line in lines {
+        let (_, nums) = line.split_once(':').unwrap();
+        let nums = nums
+            .split(',')
+            .map(|num| num.parse::<usize>().unwrap())
+            .collect::<Vec<_>>();
+        let quality = calc_quality(&nums);
+        min = min.min(quality);
+        max = max.max(quality);
+    }
+    println!("part 2 = {}", max - min);
 }
 
 fn calc_quality(nums: &[usize]) -> usize {
