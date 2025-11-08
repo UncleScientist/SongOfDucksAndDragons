@@ -147,42 +147,42 @@ impl Eq for Sword {}
 
 impl Ord for Sword {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.partial_cmp(other).unwrap()
-    }
-}
-
-impl PartialOrd for Sword {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         if self.quality > other.quality {
-            return Some(Ordering::Less);
+            return Ordering::Less;
         }
         if self.quality < other.quality {
-            return Some(Ordering::Greater);
+            return Ordering::Greater;
         }
 
         if self.shaft.len() > other.shaft.len() {
-            return Some(Ordering::Less);
+            return Ordering::Less;
         }
         if self.shaft.len() < other.shaft.len() {
-            return Some(Ordering::Greater);
+            return Ordering::Greater;
         }
 
         for idx in 0..self.shaft.len() {
             let this = self.shaft[idx].score();
             let that = other.shaft[idx].score();
             if this > that {
-                return Some(Ordering::Less);
+                return Ordering::Less;
             }
             if this < that {
-                return Some(Ordering::Greater);
+                return Ordering::Greater;
             }
         }
 
         assert!(self.id != other.id);
         if self.id > other.id {
-            Some(Ordering::Less)
+            Ordering::Less
         } else {
-            Some(Ordering::Greater)
+            Ordering::Greater
         }
+    }
+}
+
+impl PartialOrd for Sword {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
     }
 }
