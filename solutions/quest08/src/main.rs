@@ -12,6 +12,13 @@ fn main() {
         .map(|num| num.parse().unwrap())
         .collect::<Vec<_>>();
     println!("part 2 = {}", count_crossings(&nails, 256));
+
+    let lines = aoclib::read_lines("input/everybody_codes_e2025_q08_p3.txt");
+    let nails = lines[0]
+        .split(',')
+        .map(|num| num.parse().unwrap())
+        .collect::<Vec<_>>();
+    println!("part 3 = {}", find_best_cut(&nails, 256));
 }
 
 fn count_centers(nails: &[usize], nail_count: usize) -> usize {
@@ -43,6 +50,37 @@ fn count_crossings(nails: &[usize], _nail_count: usize) -> usize {
     crossings
 }
 
+fn find_best_cut(nails: &[usize], nail_count: usize) -> usize {
+    let strings = nails
+        .windows(2)
+        .map(|pair| {
+            assert!(pair[0] != pair[1]);
+            if pair[0] < pair[1] {
+                (pair[0], pair[1])
+            } else {
+                (pair[1], pair[0])
+            }
+        })
+        .collect::<Vec<_>>();
+    let mut max_crossings = 0;
+    for cur_min in 1..nail_count {
+        for cur_max in cur_min + 1..=nail_count {
+            let mut crossings = 0;
+            for &(min, max) in &strings {
+                if (cur_min < min && (cur_max < max && cur_max > min))
+                    || (cur_min > min && cur_min < max && cur_max > max)
+                    || (cur_min == min && cur_max == max)
+                {
+                    crossings += 1;
+                }
+            }
+            max_crossings = max_crossings.max(crossings);
+        }
+    }
+
+    max_crossings
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -57,5 +95,11 @@ mod test {
     fn example2() {
         let list = [1, 5, 2, 6, 8, 4, 1, 7, 3, 5, 7, 8, 2];
         assert_eq!(21, count_crossings(&list, 8));
+    }
+
+    #[test]
+    fn example3() {
+        let list = [1, 5, 2, 6, 8, 4, 1, 7, 3, 6];
+        assert_eq!(7, find_best_cut(&list, 8));
     }
 }
