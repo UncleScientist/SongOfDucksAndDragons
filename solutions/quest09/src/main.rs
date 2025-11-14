@@ -5,10 +5,12 @@ use std::{
 
 fn main() {
     let lines = aoclib::read_lines("input/everybody_codes_e2025_q09_p1.txt");
-    println!("part 1 = {}", find_child_and_degree(&lines));
+    let dragonducks: Vec<DragonDuck> = lines.iter().map(|line| line.parse().unwrap()).collect();
+    println!("part 1 = {}", find_child_and_degree(&dragonducks));
 
     let lines = aoclib::read_lines("input/everybody_codes_e2025_q09_p2.txt");
-    println!("part 2 = {}", find_all_children_and_degrees(&lines));
+    let dragonducks: Vec<DragonDuck> = lines.iter().map(|line| line.parse().unwrap()).collect();
+    println!("part 2 = {}", find_all_children_and_degrees(&dragonducks));
 
     let lines = aoclib::read_lines("input/everybody_codes_e2025_q09_p3.txt");
     let dragonducks: Vec<DragonDuck> = lines.iter().map(|line| line.parse().unwrap()).collect();
@@ -16,19 +18,16 @@ fn main() {
     println!("part 3 = {}", biggest_family(&graph));
 }
 
-fn find_child_and_degree(lines: &[String]) -> usize {
-    let lines = lines
-        .iter()
-        .map(|line| line.split_once(':').unwrap().1.chars().collect::<Vec<_>>())
-        .collect::<Vec<_>>();
-    for parent1 in 0..lines.len() - 1 {
-        for parent2 in parent1 + 1..lines.len() {
-            for child in 0..lines.len() {
+fn find_child_and_degree(dragonducks: &[DragonDuck]) -> usize {
+    for parent1 in 0..dragonducks.len() - 1 {
+        for parent2 in parent1 + 1..dragonducks.len() {
+            for child in 0..dragonducks.len() {
                 if parent1 == child || parent2 == child {
                     continue;
                 }
-                if is_child_of(&lines[parent1], &lines[parent2], &lines[child]) {
-                    return degree_of_similarity(&lines[parent1], &lines[parent2], &lines[child]);
+                if dragonducks[child].is_child_of(&dragonducks[parent1], &dragonducks[parent2]) {
+                    return dragonducks[child]
+                        .degree_of_similarity(&dragonducks[parent1], &dragonducks[parent2]);
                 }
             }
         }
@@ -36,21 +35,17 @@ fn find_child_and_degree(lines: &[String]) -> usize {
     0
 }
 
-fn find_all_children_and_degrees(lines: &[String]) -> usize {
-    let lines = lines
-        .iter()
-        .map(|line| line.split_once(':').unwrap().1.chars().collect::<Vec<_>>())
-        .collect::<Vec<_>>();
+fn find_all_children_and_degrees(dragonducks: &[DragonDuck]) -> usize {
     let mut total_degree_of_similarity = 0;
-    for child in 0..lines.len() {
-        for parent1 in 0..lines.len() - 1 {
-            for parent2 in parent1 + 1..lines.len() {
+    for child in 0..dragonducks.len() {
+        for parent1 in 0..dragonducks.len() - 1 {
+            for parent2 in parent1 + 1..dragonducks.len() {
                 if child == parent1 || child == parent2 {
                     continue;
                 }
-                if is_child_of(&lines[parent1], &lines[parent2], &lines[child]) {
-                    total_degree_of_similarity +=
-                        degree_of_similarity(&lines[parent1], &lines[parent2], &lines[child]);
+                if dragonducks[child].is_child_of(&dragonducks[parent1], &dragonducks[parent2]) {
+                    total_degree_of_similarity += dragonducks[child]
+                        .degree_of_similarity(&dragonducks[parent1], &dragonducks[parent2]);
                 }
             }
         }
@@ -114,26 +109,6 @@ fn biggest_family(graph: &HashMap<usize, HashSet<usize>>) -> usize {
     result
 }
 
-fn is_child_of(parent1: &[char], parent2: &[char], child: &[char]) -> bool {
-    child
-        .iter()
-        .enumerate()
-        .all(|(idx, &ch)| ch == parent1[idx] || ch == parent2[idx])
-}
-
-fn degree_of_similarity(parent1: &[char], parent2: &[char], child: &[char]) -> usize {
-    parent1
-        .iter()
-        .zip(child)
-        .filter(|(p1, c)| **p1 == **c)
-        .count()
-        * parent2
-            .iter()
-            .zip(child)
-            .filter(|(p2, c)| **p2 == **c)
-            .count()
-}
-
 struct DragonDuck {
     scale_number: usize,
     dna: Vec<char>,
@@ -145,6 +120,21 @@ impl DragonDuck {
             .iter()
             .enumerate()
             .all(|(idx, &ch)| ch == parent1.dna[idx] || ch == parent2.dna[idx])
+    }
+
+    fn degree_of_similarity(&self, parent1: &DragonDuck, parent2: &DragonDuck) -> usize {
+        parent1
+            .dna
+            .iter()
+            .zip(&self.dna)
+            .filter(|(p1, c)| **p1 == **c)
+            .count()
+            * parent2
+                .dna
+                .iter()
+                .zip(&self.dna)
+                .filter(|(p2, c)| **p2 == **c)
+                .count()
     }
 }
 
@@ -165,12 +155,14 @@ mod test {
 
     #[test]
     fn test_example1() {
-        let lines = vec![
+        let lines = [
             "1:CAAGCGCTAAGTTCGCTGGATGTGTGCCCGCG".to_string(),
             "2:CTTGAATTGGGCCGTTTACCTGGTTTAACCAT".to_string(),
             "3:CTAGCGCTGAGCTGGCTGCCTGGTTGACCGCG".to_string(),
         ];
-        assert_eq!(414, find_child_and_degree(&lines));
+        let dragonducks: Vec<DragonDuck> = lines.iter().map(|line| line.parse().unwrap()).collect();
+
+        assert_eq!(414, find_child_and_degree(&dragonducks));
     }
 
     #[test]
@@ -184,7 +176,9 @@ mod test {
             "6:AGTGGAACCTTGGATAGTCTCATATAGCGGCA".to_string(),
             "7:GGCGTAATAATCGGATGCTGCAGAGGCTGCTG".to_string(),
         ];
-        assert_eq!(1245, find_all_children_and_degrees(&lines));
+        let dragonducks: Vec<DragonDuck> = lines.iter().map(|line| line.parse().unwrap()).collect();
+
+        assert_eq!(1245, find_all_children_and_degrees(&dragonducks));
     }
 
     #[test]
