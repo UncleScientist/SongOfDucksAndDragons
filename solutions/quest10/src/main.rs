@@ -3,11 +3,16 @@ use std::{collections::HashSet, path::Path};
 fn main() {
     let gb = GameBoard::parse_file("input/everybody_codes_e2025_q10_p1.txt");
     println!("part 1 = {}", gb.sheep_consumed(4));
+
+    // let gb = GameBoard::parse_file("input/test_2.txt");
+    let gb = GameBoard::parse_file("input/everybody_codes_e2025_q10_p2.txt");
+    println!("part 2 = {}", gb.moving_sheep_consumed(20));
 }
 
 struct GameBoard {
     dragon: Position,
     sheep: HashSet<Position>,
+    hideout: HashSet<Position>,
     width: i64,
     height: i64,
 }
@@ -19,6 +24,7 @@ impl GameBoard {
         let height = lines.len() as i64;
         let mut dragon = Position(0, 0);
         let mut sheep = HashSet::new();
+        let mut hideout = HashSet::new();
         for (row, line) in lines.iter().enumerate() {
             for (col, ch) in line.chars().enumerate() {
                 match ch {
@@ -27,6 +33,9 @@ impl GameBoard {
                     }
                     'S' => {
                         sheep.insert(Position(row as i64, col as i64));
+                    }
+                    '#' => {
+                        hideout.insert(Position(row as i64, col as i64));
                     }
                     '.' => {}
                     _ => panic!("invalid char '{ch}'"),
@@ -37,6 +46,7 @@ impl GameBoard {
         Self {
             dragon,
             sheep,
+            hideout,
             width,
             height,
         }
@@ -60,6 +70,45 @@ impl GameBoard {
         }
 
         consumed.len()
+    }
+
+    fn moving_sheep_consumed(&self, levels: usize) -> usize {
+        let mut total_eaten = 0;
+        let mut sheep = self.sheep.clone();
+        let mut dragons = HashSet::from_iter(self.dragon.next_jumps(self.width, self.height));
+
+        for _level in 0..levels {
+            let mut next_stack = HashSet::new();
+
+            // dragon's move
+            for dragon in &dragons {
+                if sheep.contains(dragon) && !self.hideout.contains(dragon) {
+                    total_eaten += 1;
+                    sheep.remove(dragon);
+                }
+                let jumps = dragon.next_jumps(self.width, self.height);
+                for jump in jumps {
+                    next_stack.insert(jump);
+                }
+            }
+
+            // sheep move
+            sheep = sheep
+                .into_iter()
+                .map(|sheep| Position(sheep.0 + 1, sheep.1))
+                .filter(|sheep| sheep.0 < self.height)
+                .collect();
+            for d in &dragons {
+                if sheep.contains(d) && !self.hideout.contains(d) {
+                    sheep.remove(d);
+                    total_eaten += 1;
+                }
+            }
+
+            dragons = next_stack;
+        }
+
+        total_eaten
     }
 
     fn _print(&self) {
