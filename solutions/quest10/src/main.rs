@@ -1,4 +1,7 @@
-use std::{collections::HashSet, path::Path};
+use std::{
+    collections::{HashMap, HashSet},
+    path::Path,
+};
 
 fn main() {
     let gb = GameBoard::parse_file("input/everybody_codes_e2025_q10_p1.txt");
@@ -7,6 +10,26 @@ fn main() {
     // let gb = GameBoard::parse_file("input/test_2.txt");
     let gb = GameBoard::parse_file("input/everybody_codes_e2025_q10_p2.txt");
     println!("part 2 = {}", gb.moving_sheep_consumed(20));
+
+    // let gb = GameBoard::parse_file("input/test_3_2.txt");
+    let gb = GameBoard::parse_file("input/everybody_codes_e2025_q10_p3.txt");
+    let mut cache = Cache::default();
+    let initial_state = gb.get_initial_state();
+    println!("part 3 = {}", cache.find_solutions(&gb, &initial_state, 0));
+}
+
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
+enum Turn {
+    Dragon,
+    Sheep,
+}
+
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
+struct GameState {
+    dragon: Position,
+    sheep: Vec<Position>,
+    debug: String,
+    turn: Turn,
 }
 
 struct GameBoard {
@@ -111,6 +134,61 @@ impl GameBoard {
         total_eaten
     }
 
+    fn next_moves(&self, state: &GameState) -> Option<Vec<GameState>> {
+        match state.turn {
+            Turn::Dragon => Some(
+                state
+                    .dragon
+                    .next_jumps(self.width, self.height)
+                    .into_iter()
+                    .map(|dragon| GameState {
+                        dragon,
+                        sheep: state
+                            .sheep
+                            .iter()
+                            .filter(|sheep| **sheep != dragon || self.hideout.contains(*sheep))
+                            .copied()
+                            .collect(),
+                        debug: format!(
+                            "{} D>{}{}",
+                            state.debug,
+                            (dragon.1 as u8 + b'A') as char,
+                            dragon.0 + 1
+                        ),
+                        turn: Turn::Sheep,
+                    })
+                    .collect(),
+            ),
+            Turn::Sheep => {
+                if state.sheep.iter().any(|sheep| sheep.0 == self.height - 1) {
+                    return None;
+                }
+                let mut result = Vec::new();
+                for index in 0..state.sheep.len() {
+                    let mut next_sheep = state.sheep.clone();
+                    next_sheep[index].0 += 1;
+                    if next_sheep[index] != state.dragon
+                        || self.hideout.contains(&next_sheep[index])
+                    {
+                        let debug = format!(
+                            "{} S>{}{}",
+                            state.debug,
+                            (next_sheep[index].1 as u8 + b'A') as char,
+                            next_sheep[index].0 + 1
+                        );
+                        result.push(GameState {
+                            dragon: state.dragon,
+                            sheep: next_sheep,
+                            turn: Turn::Dragon,
+                            debug,
+                        });
+                    }
+                }
+                Some(result)
+            }
+        }
+    }
+
     fn _print(&self) {
         for row in 0..self.height {
             for col in 0..self.width {
@@ -125,6 +203,60 @@ impl GameBoard {
             }
             println!()
         }
+    }
+
+    fn get_initial_state(&self) -> GameState {
+        GameState {
+            dragon: self.dragon,
+            sheep: self.sheep.iter().copied().collect(),
+            debug: "".to_string(),
+            turn: Turn::Sheep,
+        }
+    }
+}
+
+#[derive(Default)]
+struct Cache {
+    cache: HashMap<GameState, usize>,
+}
+
+impl Cache {
+    fn find_solutions(&mut self, board: &GameBoard, state: &GameState, indent: usize) -> usize {
+        // println!("{:indent$}E: {state:?}", "");
+        if let Some(answer) = self.cache.get(state) {
+            // println!("{:indent$}C: {answer}", "");
+            return *answer;
+        }
+
+        self.cache.insert(state.clone(), 0);
+
+        let count = if state.sheep.len() == 0 {
+            println!("{}", state.debug);
+            1
+        } else {
+            match board.next_moves(state) {
+                None => 0,
+                Some(mut moves) => {
+                    if moves.len() == 0 {
+                        assert_eq!(state.turn, Turn::Sheep);
+                        moves = board
+                            .next_moves(&GameState {
+                                turn: Turn::Dragon,
+                                ..state.clone()
+                            })
+                            .expect("dragon couldn't move");
+                    }
+                    moves
+                        .into_iter()
+                        .map(|state| self.find_solutions(board, &state, indent + 1))
+                        .sum::<usize>()
+                }
+            }
+        };
+
+        // println!("{:indent$}S: {state:?} => {count}", "");
+        self.cache.insert(state.clone(), count);
+        count
     }
 }
 
@@ -153,5 +285,34 @@ impl Position {
             .filter(|next| !(next.0 < 0 || next.1 < 0 || next.0 >= height || next.1 >= width))
             .map(Position::new)
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_example3_1() {
+        let gb = GameBoard::parse_file("input/test_3_1.txt");
+        let mut cache = Cache::default();
+        let initial_state = gb.get_initial_state();
+        assert_eq!(15, cache.find_solutions(&gb, &initial_state, 0));
+    }
+
+    #[test]
+    fn test_example3_2() {
+        let gb = GameBoard::parse_file("input/test_3_2.txt");
+        let mut cache = Cache::default();
+        let initial_state = gb.get_initial_state();
+        assert_eq!(8, cache.find_solutions(&gb, &initial_state, 0));
+    }
+
+    #[test]
+    fn test_example3_3() {
+        let gb = GameBoard::parse_file("input/test_3_3.txt");
+        let mut cache = Cache::default();
+        let initial_state = gb.get_initial_state();
+        assert_eq!(44, cache.find_solutions(&gb, &initial_state, 0));
     }
 }
