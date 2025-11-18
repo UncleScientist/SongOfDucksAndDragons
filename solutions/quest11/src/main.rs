@@ -15,6 +15,14 @@ fn main() {
         .collect::<Vec<_>>();
     let mut flock = Flock::new(&columns);
     println!("part 2 = {}", flock.rounds_until_balanced());
+
+    let lines = aoclib::read_lines("input/everybody_codes_e2025_q11_p3.txt");
+    let columns = lines
+        .iter()
+        .map(|line| line.parse().unwrap())
+        .collect::<Vec<_>>();
+    let mut flock = Flock::new(&columns);
+    println!("part 3 = {}", flock.rounds_until_balanced());
 }
 
 #[derive(Debug)]
@@ -76,11 +84,21 @@ impl Flock {
     }
 
     fn rounds_until_balanced(&mut self) -> usize {
-        let mut count = 0;
-        while !self.round() {
+        let mut count = 0usize;
+        while self.phase == Phase::First {
+            self.round();
             count += 1;
         }
+        let sum = self.columns.iter().sum::<usize>();
+        let avg = sum / self.columns.len();
+
         count
+            + self
+                .columns
+                .iter()
+                .filter(|&&col| col < avg)
+                .map(|col| avg - col)
+                .sum::<usize>()
     }
 
     fn checksum(&self) -> usize {
