@@ -87,3 +87,6 @@ dependencies = [
 [[package]]
 name = "quest12"
 version = "0.1.0"
+dependencies = [
+ "aoclib",
+]
