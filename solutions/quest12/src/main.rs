@@ -3,7 +3,14 @@ use std::collections::HashSet;
 fn main() {
     let lines = aoclib::read_lines("input/everybody_codes_e2025_q12_p1.txt");
     let grid = Grid::new(&lines);
-    println!("part 1 = {}", grid.explode());
+    println!("part 1 = {}", grid.explode(&[(0, 0)]));
+
+    let lines = aoclib::read_lines("input/everybody_codes_e2025_q12_p2.txt");
+    let grid = Grid::new(&lines);
+    println!(
+        "part 2 = {}",
+        grid.explode(&[(0, 0), (grid.height - 1, grid.width - 1)])
+    );
 }
 
 #[derive(Debug)]
@@ -30,8 +37,8 @@ impl Grid {
         }
     }
 
-    fn explode(&self) -> usize {
-        let mut stack = Vec::from([(0isize, 0isize)]);
+    fn explode(&self, start: &[(isize, isize)]) -> usize {
+        let mut stack = Vec::from(start);
         let mut visited = HashSet::<(isize, isize)>::new();
 
         while let Some(pos) = stack.pop() {
@@ -66,6 +73,27 @@ mod tests {
     fn test_example1() {
         let lines = ["989601", "857782", "746543", "766789"];
         let grid = Grid::new(&lines);
-        assert_eq!(16, grid.explode());
+        assert_eq!(16, grid.explode(&[(0, 0)]));
+    }
+
+    #[test]
+    fn test_example2() {
+        let lines = [
+            "9589233445",
+            "9679121695",
+            "8469121876",
+            "8352919876",
+            "7342914327",
+            "7234193437",
+            "6789193538",
+            "6781219648",
+            "5691219769",
+            "5443329859",
+        ];
+        let grid = Grid::new(&lines);
+        assert_eq!(
+            58,
+            grid.explode(&[(0, 0), (grid.height - 1, grid.width - 1)])
+        );
     }
 }
