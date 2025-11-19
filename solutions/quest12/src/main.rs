@@ -5,6 +5,10 @@ fn main() {
     let grid = Grid::new(&lines);
     println!("part 1 = {}", grid.explode(&[(0, 0)]).len());
 
+    let clearing = Clearing::new(&lines);
+    let start = grid::GridPosition::new(0, 0);
+    println!("part 1 (clearing) = {}", clearing.explode(&[start]).len());
+
     let lines = aoclib::read_lines("input/everybody_codes_e2025_q12_p2.txt");
     let grid = Grid::new(&lines);
     println!(
@@ -16,6 +20,42 @@ fn main() {
     let lines = aoclib::read_lines("input/everybody_codes_e2025_q12_p3.txt");
     let grid = Grid::new(&lines);
     println!("part 3 = {}", grid.triple_explosion());
+}
+
+#[derive(Debug)]
+struct Clearing {
+    grid: grid::FullGrid<u8>,
+}
+
+impl Clearing {
+    fn new<S: AsRef<str>>(lines: &[S]) -> Self {
+        let grid = grid::FullGrid::build_from(lines, |_row, _col, ch| ch as u8 - b'0');
+        Self { grid }
+    }
+
+    fn explode(&self, start: &[grid::GridPosition]) -> HashSet<grid::GridPosition> {
+        let mut stack = Vec::from(start);
+        let mut visited = HashSet::new();
+
+        while let Some(pos) = stack.pop() {
+            if let Some(cur_value) = self.grid.get(&pos) {
+                if cur_value == 10 {
+                    continue;
+                }
+                if visited.insert(pos) {
+                    for neighbor in pos.cardinal_dirs(&self.grid) {
+                        if let Some(new_value) = self.grid.get(&neighbor)
+                            && new_value <= cur_value
+                        {
+                            stack.push(neighbor);
+                        }
+                    }
+                }
+            }
+        }
+
+        visited
+    }
 }
 
 type BarrelSet = HashSet<(isize, isize)>;
@@ -158,4 +198,109 @@ mod tests {
         let grid = Grid::new(&lines);
         assert_eq!(136, grid.triple_explosion());
     }
+}
+
+mod grid {
+    use std::slice::Iter;
+
+    #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, Default)]
+    pub struct GridPosition(isize, isize);
+
+    impl GridPosition {
+        const DIRS: [GridPosition; 4] = [
+            GridPosition(-1, 0),
+            GridPosition(0, 1),
+            GridPosition(1, 0),
+            GridPosition(0, -1),
+        ];
+
+        pub fn new(row: isize, col: isize) -> Self {
+            Self(row, col)
+        }
+
+        pub fn vec_size<T>(vec: &[Vec<T>]) -> Self {
+            if vec.is_empty() {
+                Self(0, 0)
+            } else {
+                Self(vec.len() as isize, vec[0].len() as isize)
+            }
+        }
+
+        pub fn in_range(&self, lower_right: &GridPosition) -> bool {
+            !(self.0 < 0 || self.1 < 0 || self.0 >= lower_right.0 || self.1 >= lower_right.1)
+        }
+
+        pub fn cardinal_dirs<T>(&self, on_grid: &FullGrid<T>) -> GridIterator {
+            GridIterator {
+                center: *self,
+                lower_right: GridPosition::vec_size(&on_grid.grid),
+                deltas: Self::DIRS.iter(),
+            }
+        }
+    }
+
+    pub struct GridIterator {
+        center: GridPosition,
+        lower_right: GridPosition,
+        deltas: Iter<'static, GridPosition>,
+    }
+
+    impl Iterator for GridIterator {
+        type Item = GridPosition;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            loop {
+                match self.deltas.next() {
+                    None => return None,
+                    Some(delta) => {
+                        let next = GridPosition(self.center.0 + delta.0, self.center.1 + delta.1);
+                        if next.in_range(&self.lower_right) {
+                            return Some(next);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[derive(Debug, Default)]
+    pub struct FullGrid<T> {
+        grid: Vec<Vec<T>>,
+        lower_right: GridPosition
+    }
+
+    impl<T: Clone> FullGrid<T> {
+        pub fn get(&self, gp: &GridPosition) -> Option<T> {
+            if gp.in_range(&self.lower_right) {
+                Some(self.grid[gp.0 as usize][gp.1 as usize].clone())
+            } else {
+                None
+            }
+        }
+
+        pub fn build_from<S: AsRef<str>>(
+            lines: &[S],
+            func: impl Fn(usize, usize, char) -> T,
+        ) -> Self {
+            let mut grid = Vec::new();
+            for (row, line) in lines.iter().enumerate() {
+                grid.push(
+                    line.as_ref()
+                        .chars()
+                        .enumerate()
+                        .map(|(col, ch)| func(row, col, ch))
+                        .collect(),
+                );
+            }
+            let lower_right = GridPosition::vec_size(&grid);
+            Self { grid, lower_right }
+        }
+    }
+
+    /*
+    #[derive(Debug, Default)]
+    pub struct SparseGrid<T> {
+        grid: HashMap<GridPosition, T>,
+    }
+    */
 }
