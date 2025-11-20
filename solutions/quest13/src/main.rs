@@ -8,6 +8,10 @@ fn main() {
     let lines = aoclib::read_lines("input/everybody_codes_e2025_q13_p2.txt");
     let dial = Dial::build_from_ranges(&lines);
     println!("part 2 = {}", dial.turn_clockwise(20252025));
+
+    let lines = aoclib::read_lines("input/everybody_codes_e2025_q13_p3.txt");
+    let dial = Dial::build_from_ranges(&lines);
+    println!("part 3 = {}", dial.turn_clockwise(202520252025));
 }
 
 struct Dial {
