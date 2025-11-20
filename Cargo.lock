@@ -90,3 +90,10 @@ version = "0.1.0"
 dependencies = [
  "aoclib",
 ]
+
+[[package]]
+name = "quest13"
+version = "0.1.0"
+dependencies = [
+ "aoclib",
+]
