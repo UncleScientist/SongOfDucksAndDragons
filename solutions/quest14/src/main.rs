@@ -9,6 +9,15 @@ fn main() {
         total += grid.points.len();
     }
     println!("part 1 = {total}");
+
+    let lines = aoclib::read_lines("input/everybody_codes_e2025_q14_p2.txt");
+    let mut grid = Grid::from(&lines);
+    let mut total = 0;
+    for _ in 0..2025 {
+        grid.step();
+        total += grid.points.len();
+    }
+    println!("part 2 = {total}");
 }
 
 #[derive(Debug)]
