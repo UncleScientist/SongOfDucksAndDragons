@@ -1,14 +1,64 @@
 use std::{
-    collections::HashSet,
+    collections::{BTreeMap, HashMap, HashSet},
     convert::Infallible,
+    hash::Hash,
     ops::{Add, AddAssign},
     str::FromStr,
 };
 
-fn main() {
+use macroquad::prelude::*;
+
+#[macroquad::main("Definitely Not a Maze")]
+async fn main() {
     let part1 = aoclib::read_lines("input/everybody_codes_e2025_q15_p1.txt");
     let maze = part1[0].parse::<Maze>().unwrap();
     println!("Quest 15, Part 1 = {}", maze.shortest_path());
+
+    if std::env::var("GUI1").is_ok() {
+        gui_part1(&maze).await;
+    }
+}
+
+async fn gui_part1(maze: &Maze) {
+    let neighbors = |point: &Point| {
+        DIRS.iter()
+            .map(|dir| *point + *dir)
+            .filter(|point| !maze.walls.contains(point))
+            .filter(|point| {
+                point.0 >= maze.upper_left.0
+                    && point.0 <= maze.lower_right.0
+                    && point.1 >= maze.upper_left.1
+                    && point.1 <= maze.lower_right.1
+            })
+            .map(|point| (point, 1))
+            .collect()
+    };
+    let heuristic = |point: &Point| point.dist_to(&maze.end);
+    let is_end = |point: &Point| maze.end == *point;
+
+    let mut visible_astar = Astar::new(&Point(0, 0), &neighbors, &heuristic, &is_end);
+
+    let result = loop {
+        match visible_astar.step() {
+            StepResult::Answer(ans) => break Some(ans),
+            StepResult::Ongoing => {
+                maze.draw(&visible_astar.visited, None).await;
+            }
+            StepResult::SearchFailure => break None,
+        }
+    };
+
+    let result = if let Some((_, result)) = result {
+        Some(result)
+    } else {
+        None
+    };
+
+    while !is_mouse_button_pressed(MouseButton::Left) {
+        maze.draw(&visible_astar.visited, result).await;
+    }
+
+    println!("result = {result:?}");
 }
 
 #[derive(Debug)]
@@ -20,6 +70,56 @@ struct Maze {
 }
 
 impl Maze {
+    const SCALE: f32 = 10.0;
+
+    async fn draw(&self, visited: &HashSet<Point>, dist: Option<usize>) {
+        let trans_x = self.upper_left.1.abs() as f32 * Self::SCALE;
+        let trans_y = self.upper_left.0.abs() as f32 * Self::SCALE + 55.0;
+        clear_background(BLACK);
+        draw_line(0.0, 50.0, screen_width(), 50.0, 1.0, WHITE);
+        for wall in &self.walls {
+            draw_rectangle(
+                trans_x + wall.1 as f32 * Self::SCALE,
+                trans_y + wall.0 as f32 * Self::SCALE,
+                Self::SCALE - 1.0,
+                Self::SCALE - 1.0,
+                BLUE,
+            );
+        }
+        draw_rectangle(trans_x, trans_y, Self::SCALE - 1.0, Self::SCALE - 1.0, RED);
+        draw_rectangle(
+            trans_x + Self::SCALE * self.end.1 as f32,
+            trans_y + Self::SCALE * self.end.0 as f32,
+            Self::SCALE - 1.0,
+            Self::SCALE - 1.0,
+            RED,
+        );
+
+        for v in visited {
+            draw_rectangle(
+                trans_x + Self::SCALE * v.1 as f32,
+                trans_y + Self::SCALE * v.0 as f32,
+                Self::SCALE - 1.0,
+                Self::SCALE - 1.0,
+                GREEN,
+            );
+        }
+
+        draw_text(
+            format!("Points visited: {}", visited.len()),
+            5.0,
+            20.0,
+            24.0,
+            WHITE,
+        );
+
+        if let Some(dist) = dist {
+            draw_text(format!("Shortest distance: {dist}"), 5.0, 40.0, 24.0, WHITE);
+        }
+
+        next_frame().await
+    }
+
     fn shortest_path(&self) -> usize {
         aoclib::astar(
             &Point(0, 0),
@@ -41,15 +141,6 @@ impl Maze {
         )
         .unwrap()
         .1
-
-        /*
-        pub fn astar<T, S>(
-            start: &T,
-            neighbors: impl Fn(&T) -> Vec<(T, S)>,
-            heuristic: impl Fn(&T) -> S,
-            is_end: impl Fn(&T) -> bool,
-        ) -> Option<(T, S)>
-            */
     }
 }
 
@@ -182,4 +273,75 @@ mod test {
             .unwrap();
         assert_eq!(16, maze.shortest_path());
     }
+}
+
+struct Astar<'a> {
+    queue: BTreeMap<(usize, usize), HashSet<Point>>,
+    visited: HashSet<Point>,
+    dist: HashMap<Point, Option<usize>>,
+    neighbors: &'a dyn Fn(&Point) -> Vec<(Point, usize)>,
+    heuristic: &'a dyn Fn(&Point) -> usize,
+    is_end: &'a dyn Fn(&Point) -> bool,
+}
+
+impl<'a> Astar<'a> {
+    fn new(
+        start: &Point,
+        neighbors: &'a dyn Fn(&Point) -> Vec<(Point, usize)>,
+        heuristic: &'a dyn Fn(&Point) -> usize,
+        is_end: &'a dyn Fn(&Point) -> bool,
+    ) -> Self {
+        Self {
+            queue: BTreeMap::from([((0, 0), HashSet::from([*start]))]),
+            visited: HashSet::new(),
+            dist: HashMap::new(),
+            neighbors,
+            heuristic,
+            is_end,
+        }
+    }
+
+    fn step(&mut self) -> StepResult {
+        let current = self.queue.pop_first();
+        if current.is_none() {
+            return StepResult::SearchFailure;
+        }
+
+        if let Some(((h, time), pos_list)) = current {
+            for pos in pos_list.iter() {
+                if (self.is_end)(pos) {
+                    return StepResult::Answer((*pos, time));
+                }
+                if self.visited.insert(*pos) {
+                    for (new_pos, cost) in (self.neighbors)(pos) {
+                        let new_time = time + cost;
+                        let new_h = new_time + (self.heuristic)(&new_pos);
+                        let dist_entry = self.dist.entry(new_pos).or_insert(None);
+                        if let Some(dist_time) = dist_entry {
+                            if new_time >= *dist_time {
+                                continue;
+                            }
+
+                            if let Some(qentry) = self.queue.get_mut(&(h, *dist_time)) {
+                                qentry.remove(pos);
+                            }
+                        }
+                        *dist_entry = Some(new_time);
+                        self.queue
+                            .entry((new_h, new_time))
+                            .or_default()
+                            .insert(new_pos);
+                    }
+                }
+            }
+        }
+
+        StepResult::Ongoing
+    }
+}
+
+enum StepResult {
+    Answer((Point, usize)),
+    Ongoing,
+    SearchFailure,
 }
