@@ -74,6 +74,9 @@ struct Maze {
     upper_left: Point,
     lower_right: Point,
     walls: HashSet<Point>,
+    outer_points: HashSet<Point>,
+    wall_lines: Vec<Line>,
+    path_lines: Vec<Line>,
 }
 
 impl Maze {
@@ -88,9 +91,24 @@ impl Maze {
                 trans_y + wall.0 as f32 * scale,
                 scale - 1.0,
                 scale - 1.0,
-                BLUE,
+                DARKBLUE,
             );
         }
+
+        for line in &self.wall_lines {
+            line.draw(trans_x, trans_y, scale, BLUE);
+        }
+
+        for &Point(row, col) in visited {
+            draw_rectangle(
+                trans_x + scale * col as f32,
+                trans_y + scale * row as f32,
+                scale - 1.0,
+                scale - 1.0,
+                DARKGREEN,
+            );
+        }
+
         draw_rectangle(trans_x, trans_y, scale - 1.0, scale - 1.0, RED);
         draw_rectangle(
             trans_x + scale * self.end.1 as f32,
@@ -100,14 +118,18 @@ impl Maze {
             RED,
         );
 
-        for v in visited {
+        for &Point(row, col) in &self.outer_points {
             draw_rectangle(
-                trans_x + scale * v.1 as f32,
-                trans_y + scale * v.0 as f32,
+                trans_x + scale * col as f32,
+                trans_y + scale * row as f32,
                 scale - 1.0,
                 scale - 1.0,
-                GREEN,
+                YELLOW,
             );
+        }
+
+        for line in &self.path_lines {
+            line.draw(trans_x, trans_y, scale, BLUE);
         }
 
         draw_text(
@@ -158,22 +180,65 @@ impl FromStr for Maze {
         let mut dir = Direction::Up;
         let mut upper_left = Point(0, 0);
         let mut lower_right = Point(0, 0);
+        let mut outer_points = HashSet::new();
+        let mut wall_lines = Vec::new();
+        let mut path_lines = Vec::new();
 
         for instruction in line.split(',') {
             let turn = &instruction[0..1];
             let amount = instruction[1..].parse::<isize>().unwrap();
-            dir = match turn {
+            let new_dir = match turn {
                 "L" => dir.turn_left(),
                 "R" => dir.turn_right(),
                 _ => panic!("invalid turn '{turn}'"),
             };
+
+            match (dir, new_dir) {
+                (Direction::Right, Direction::Down) | (Direction::Up, Direction::Left) => {
+                    outer_points.insert(Point(end.0 - 1, end.1 + 1))
+                }
+                (Direction::Left, Direction::Down) | (Direction::Up, Direction::Right) => {
+                    outer_points.insert(Point(end.0 - 1, end.1 - 1))
+                }
+                (Direction::Right, Direction::Up) | (Direction::Down, Direction::Left) => {
+                    outer_points.insert(Point(end.0 + 1, end.1 + 1))
+                }
+                (Direction::Left, Direction::Up) | (Direction::Down, Direction::Right) => {
+                    outer_points.insert(Point(end.0 + 1, end.1 - 1))
+                }
+                _ => unreachable!(),
+            };
+
+            dir = new_dir;
+            let start = end;
             for _ in 0..amount {
                 end += dir;
                 walls.insert(end);
             }
+            wall_lines.push(Line::from_points(start, end));
 
             upper_left = Point(upper_left.0.min(end.0), upper_left.1.min(end.1));
             lower_right = Point(lower_right.0.max(end.0), lower_right.1.max(end.1));
+        }
+
+        for start in [Point(-1, 0), Point(1, 0), Point(0, -1), Point(0, 1)] {
+            if !walls.contains(&start) {
+                outer_points.insert(start);
+            }
+        }
+        outer_points.insert(end);
+
+        for op in &outer_points {
+            for other in &outer_points {
+                if op == other || (op.0 != other.0 && op.1 != other.1) {
+                    continue;
+                }
+                let line = Line::from_points(*op, *other);
+                if wall_lines.iter().any(|wall| line.intersects_with(wall)) {
+                    continue;
+                }
+                path_lines.push(line);
+            }
         }
 
         walls.remove(&end);
@@ -183,6 +248,9 @@ impl FromStr for Maze {
             upper_left,
             lower_right,
             walls,
+            outer_points,
+            wall_lines,
+            path_lines,
         })
     }
 }
@@ -278,6 +346,32 @@ mod test {
             .unwrap();
         assert_eq!(16, maze.shortest_path());
     }
+
+    #[test]
+    fn test_horiz_intersects_vert() {
+        let h = Horizontal::new(Point(0, 0), Point(0, -6));
+        let v1 = Vertical::new(Point(6, 3), Point(-6, 3)); // to the right
+        let v2 = Vertical::new(Point(6, -3), Point(-6, -3)); // goes through
+        let v3 = Vertical::new(Point(6, -12), Point(-6, -12)); // to the left
+        assert!(!h.intersects_vert(&v1));
+        assert!(h.intersects_vert(&v2));
+        assert!(!h.intersects_vert(&v3));
+    }
+
+    #[test]
+    fn test_horiz_intersects_horiz() {
+        let h1 = Horizontal::new(Point(0, 0), Point(0, 10));
+        let h2 = Horizontal::new(Point(0, -4), Point(0, 14));
+        let h3 = Horizontal::new(Point(0, -4), Point(0, 5));
+        let h4 = Horizontal::new(Point(0, 7), Point(0, 14));
+        let h5 = Horizontal::new(Point(0, -10), Point(0, -5));
+        let h6 = Horizontal::new(Point(0, 20), Point(0, 30));
+        assert!(h1.intersects_horiz(&h2));
+        assert!(h1.intersects_horiz(&h3));
+        assert!(h1.intersects_horiz(&h4));
+        assert!(!h1.intersects_horiz(&h5));
+        assert!(!h1.intersects_horiz(&h6));
+    }
 }
 
 struct Astar<NODE, FN, FH, FEND> {
@@ -348,4 +442,102 @@ enum StepResult<NODE> {
     Answer((NODE, usize)),
     Ongoing,
     SearchFailure,
+}
+
+#[derive(Debug)]
+enum Line {
+    Horizontal(Horizontal),
+    Vertical(Vertical),
+}
+
+impl Line {
+    fn from_points(start: Point, end: Point) -> Self {
+        if start.0 == end.0 {
+            Self::Horizontal(Horizontal::new(start, end))
+        } else {
+            Self::Vertical(Vertical::new(start, end))
+        }
+    }
+
+    fn draw(&self, tx: f32, ty: f32, scale: f32, color: Color) {
+        let (x1, y1, x2, y2) = match self {
+            Line::Horizontal(Horizontal { start, end }) => (start.1, start.0, end.1, end.0),
+            Line::Vertical(Vertical { start, end }) => (start.1, start.0, end.1, end.0),
+        };
+        draw_line(
+            tx + scale / 2.0 + x1 as f32 * scale,
+            ty + scale / 2.0 + y1 as f32 * scale,
+            tx + scale / 2.0 + x2 as f32 * scale,
+            ty + scale / 2.0 + y2 as f32 * scale,
+            1.0,
+            color,
+        );
+    }
+
+    fn intersects_with(&self, wall: &Line) -> bool {
+        match (self, wall) {
+            (Line::Horizontal(h1), Line::Horizontal(h2)) => h1.intersects_horiz(h2),
+            (Line::Horizontal(h), Line::Vertical(v)) => h.intersects_vert(v),
+            (Line::Vertical(v), Line::Horizontal(h)) => v.intersects_horiz(h),
+            (Line::Vertical(v1), Line::Vertical(v2)) => v1.intersects_vert(v2),
+        }
+    }
+}
+
+#[derive(Debug)]
+struct Horizontal {
+    start: Point,
+    end: Point,
+}
+
+impl Horizontal {
+    fn new(p1: Point, p2: Point) -> Self {
+        assert_eq!(p1.0, p2.0);
+        Self {
+            start: Point(p1.0, p1.1.min(p2.1)),
+            end: Point(p1.0, p1.1.max(p2.1)),
+        }
+    }
+
+    fn intersects_vert(&self, vert: &Vertical) -> bool {
+        self.start.1 < vert.start.1
+            && self.end.1 > vert.end.1
+            && self.start.0 > vert.start.0
+            && self.end.0 < vert.end.0
+    }
+
+    fn intersects_horiz(&self, other: &Horizontal) -> bool {
+        self.start.0 == other.start.0
+            && ((self.start.1 < other.start.1 && self.end.1 > other.end.1)
+                || (self.start.1 < other.start.1 && self.end.1 > other.start.1)
+                || (self.start.1 < other.end.1 && self.end.1 > other.end.1)
+                || (self.start.1 > other.start.1 && self.end.1 < other.end.1))
+    }
+}
+
+#[derive(Debug)]
+struct Vertical {
+    start: Point,
+    end: Point,
+}
+
+impl Vertical {
+    fn new(p1: Point, p2: Point) -> Self {
+        assert_eq!(p1.1, p2.1);
+        Self {
+            start: Point(p1.0.min(p2.0), p1.1),
+            end: Point(p1.0.max(p2.0), p1.1),
+        }
+    }
+
+    fn intersects_horiz(&self, horiz: &Horizontal) -> bool {
+        horiz.intersects_vert(self)
+    }
+
+    fn intersects_vert(&self, other: &Vertical) -> bool {
+        self.start.1 == other.start.1
+            && ((self.start.0 < other.start.0 && self.end.0 > other.end.0)
+                || (self.start.0 < other.start.0 && self.end.0 > other.start.0)
+                || (self.start.0 < other.end.0 && self.end.0 > other.end.0))
+    }
 }
