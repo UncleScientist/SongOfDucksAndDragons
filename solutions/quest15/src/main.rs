@@ -36,7 +36,7 @@ async fn gui_part1(maze: &Maze) {
     let heuristic = |point: &Point| point.dist_to(&maze.end);
     let is_end = |point: &Point| maze.end == *point;
 
-    let mut visible_astar = Astar::new(&Point(0, 0), &neighbors, &heuristic, &is_end);
+    let mut visible_astar = Astar::new(&Point(0, 0), neighbors, heuristic, is_end);
 
     let result = loop {
         match visible_astar.step() {
@@ -275,22 +275,23 @@ mod test {
     }
 }
 
-struct Astar<'a> {
-    queue: BTreeMap<(usize, usize), HashSet<Point>>,
-    visited: HashSet<Point>,
-    dist: HashMap<Point, Option<usize>>,
-    neighbors: &'a dyn Fn(&Point) -> Vec<(Point, usize)>,
-    heuristic: &'a dyn Fn(&Point) -> usize,
-    is_end: &'a dyn Fn(&Point) -> bool,
+struct Astar<NODE, FN, FH, FEND> {
+    queue: BTreeMap<(usize, usize), HashSet<NODE>>,
+    visited: HashSet<NODE>,
+    dist: HashMap<NODE, Option<usize>>,
+    neighbors: FN,
+    heuristic: FH,
+    is_end: FEND,
 }
 
-impl<'a> Astar<'a> {
-    fn new(
-        start: &Point,
-        neighbors: &'a dyn Fn(&Point) -> Vec<(Point, usize)>,
-        heuristic: &'a dyn Fn(&Point) -> usize,
-        is_end: &'a dyn Fn(&Point) -> bool,
-    ) -> Self {
+impl<NODE, FN, FH, FEND> Astar<NODE, FN, FH, FEND>
+where
+    NODE: Hash + PartialEq + Eq + Copy,
+    FN: Fn(&NODE) -> Vec<(NODE, usize)>,
+    FH: Fn(&NODE) -> usize,
+    FEND: Fn(&NODE) -> bool,
+{
+    fn new(start: &NODE, neighbors: FN, heuristic: FH, is_end: FEND) -> Self {
         Self {
             queue: BTreeMap::from([((0, 0), HashSet::from([*start]))]),
             visited: HashSet::new(),
@@ -301,37 +302,35 @@ impl<'a> Astar<'a> {
         }
     }
 
-    fn step(&mut self) -> StepResult {
-        let current = self.queue.pop_first();
-        if current.is_none() {
+    fn step(&mut self) -> StepResult<NODE> {
+        let Some(((h, time), pos_list)) = self.queue.pop_first() else {
             return StepResult::SearchFailure;
-        }
+        };
 
-        if let Some(((h, time), pos_list)) = current {
-            for pos in pos_list.iter() {
-                if (self.is_end)(pos) {
-                    return StepResult::Answer((*pos, time));
-                }
-                if self.visited.insert(*pos) {
-                    for (new_pos, cost) in (self.neighbors)(pos) {
-                        let new_time = time + cost;
-                        let new_h = new_time + (self.heuristic)(&new_pos);
-                        let dist_entry = self.dist.entry(new_pos).or_insert(None);
-                        if let Some(dist_time) = dist_entry {
-                            if new_time >= *dist_time {
-                                continue;
-                            }
+        for pos in pos_list.iter() {
+            if (self.is_end)(pos) {
+                return StepResult::Answer((*pos, time));
+            }
+            if self.visited.insert(*pos) {
+                for (new_pos, cost) in (self.neighbors)(pos) {
+                    let new_time = time + cost;
+                    let new_h = new_time + (self.heuristic)(&new_pos);
 
-                            if let Some(qentry) = self.queue.get_mut(&(h, *dist_time)) {
-                                qentry.remove(pos);
-                            }
+                    let dist_entry = self.dist.entry(new_pos).or_insert(None);
+                    if let Some(dist_time) = dist_entry {
+                        if new_time >= *dist_time {
+                            continue;
                         }
-                        *dist_entry = Some(new_time);
-                        self.queue
-                            .entry((new_h, new_time))
-                            .or_default()
-                            .insert(new_pos);
+
+                        if let Some(qentry) = self.queue.get_mut(&(h, *dist_time)) {
+                            qentry.remove(pos);
+                        }
                     }
+                    *dist_entry = Some(new_time);
+                    self.queue
+                        .entry((new_h, new_time))
+                        .or_default()
+                        .insert(new_pos);
                 }
             }
         }
@@ -340,8 +339,8 @@ impl<'a> Astar<'a> {
     }
 }
 
-enum StepResult {
-    Answer((Point, usize)),
+enum StepResult<NODE> {
+    Answer((NODE, usize)),
     Ongoing,
     SearchFailure,
 }
