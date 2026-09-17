@@ -15,11 +15,19 @@ async fn main() {
     println!("Quest 15, Part 1 = {}", maze.shortest_path());
 
     if std::env::var("GUI1").is_ok() {
-        gui_part1(&maze).await;
+        draw_gui(&maze, 1, 10.0).await;
+    }
+
+    let part2 = aoclib::read_lines("input/everybody_codes_e2025_q15_p2.txt");
+    let maze = part2[0].parse::<Maze>().unwrap();
+    println!("Quest 15, Part 2 = {}", maze.shortest_path());
+
+    if std::env::var("GUI2").is_ok() {
+        draw_gui(&maze, 100, 2.0).await;
     }
 }
 
-async fn gui_part1(maze: &Maze) {
+async fn draw_gui(maze: &Maze, steps: usize, scale: f32) {
     let neighbors = |point: &Point| {
         DIRS.iter()
             .map(|dir| *point + *dir)
@@ -38,14 +46,15 @@ async fn gui_part1(maze: &Maze) {
 
     let mut visible_astar = Astar::new(&Point(0, 0), neighbors, heuristic, is_end);
 
-    let result = loop {
-        match visible_astar.step() {
-            StepResult::Answer(ans) => break Some(ans),
-            StepResult::Ongoing => {
-                maze.draw(&visible_astar.visited, None).await;
+    let result = 'out: loop {
+        for _ in 0..steps {
+            match visible_astar.step() {
+                StepResult::Answer(ans) => break 'out Some(ans),
+                StepResult::Ongoing => {}
+                StepResult::SearchFailure => break 'out None,
             }
-            StepResult::SearchFailure => break None,
         }
+        maze.draw(&visible_astar.visited, None, scale).await;
     };
 
     let result = if let Some((_, result)) = result {
@@ -55,7 +64,7 @@ async fn gui_part1(maze: &Maze) {
     };
 
     while !is_mouse_button_pressed(MouseButton::Left) {
-        maze.draw(&visible_astar.visited, result).await;
+        maze.draw(&visible_astar.visited, result, scale).await;
     }
 
     println!("result = {result:?}");
@@ -70,37 +79,35 @@ struct Maze {
 }
 
 impl Maze {
-    const SCALE: f32 = 10.0;
-
-    async fn draw(&self, visited: &HashSet<Point>, dist: Option<usize>) {
-        let trans_x = self.upper_left.1.abs() as f32 * Self::SCALE;
-        let trans_y = self.upper_left.0.abs() as f32 * Self::SCALE + 55.0;
+    async fn draw(&self, visited: &HashSet<Point>, dist: Option<usize>, scale: f32) {
+        let trans_x = self.upper_left.1.abs() as f32 * scale;
+        let trans_y = self.upper_left.0.abs() as f32 * scale + 55.0;
         clear_background(BLACK);
         draw_line(0.0, 50.0, screen_width(), 50.0, 1.0, WHITE);
         for wall in &self.walls {
             draw_rectangle(
-                trans_x + wall.1 as f32 * Self::SCALE,
-                trans_y + wall.0 as f32 * Self::SCALE,
-                Self::SCALE - 1.0,
-                Self::SCALE - 1.0,
+                trans_x + wall.1 as f32 * scale,
+                trans_y + wall.0 as f32 * scale,
+                scale - 1.0,
+                scale - 1.0,
                 BLUE,
             );
         }
-        draw_rectangle(trans_x, trans_y, Self::SCALE - 1.0, Self::SCALE - 1.0, RED);
+        draw_rectangle(trans_x, trans_y, scale - 1.0, scale - 1.0, RED);
         draw_rectangle(
-            trans_x + Self::SCALE * self.end.1 as f32,
-            trans_y + Self::SCALE * self.end.0 as f32,
-            Self::SCALE - 1.0,
-            Self::SCALE - 1.0,
+            trans_x + scale * self.end.1 as f32,
+            trans_y + scale * self.end.0 as f32,
+            scale - 1.0,
+            scale - 1.0,
             RED,
         );
 
         for v in visited {
             draw_rectangle(
-                trans_x + Self::SCALE * v.1 as f32,
-                trans_y + Self::SCALE * v.0 as f32,
-                Self::SCALE - 1.0,
-                Self::SCALE - 1.0,
+                trans_x + scale * v.1 as f32,
+                trans_y + scale * v.0 as f32,
+                scale - 1.0,
+                scale - 1.0,
                 GREEN,
             );
         }
