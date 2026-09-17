@@ -63,11 +63,9 @@ async fn draw_gui(maze: &Maze, steps: usize, scale: f32) {
         None
     };
 
-    while !is_mouse_button_pressed(MouseButton::Left) {
+    while !is_mouse_button_pressed(MouseButton::Right) {
         maze.draw(&visible_astar.visited, result, scale).await;
     }
-
-    println!("result = {result:?}");
 }
 
 #[derive(Debug)]
