@@ -2,7 +2,7 @@ use std::{
     collections::{BTreeMap, HashMap, HashSet},
     convert::Infallible,
     hash::Hash,
-    ops::{Add, AddAssign},
+    ops::{Add, AddAssign, Mul},
     str::FromStr,
 };
 
@@ -12,18 +12,95 @@ use macroquad::prelude::*;
 async fn main() {
     let part1 = aoclib::read_lines("input/everybody_codes_e2025_q15_p1.txt");
     let maze = part1[0].parse::<Maze>().unwrap();
+    // let maze = "R3,R4,R5,R6".parse::<Maze>().unwrap();
     println!("Quest 15, Part 1 = {}", maze.shortest_path());
 
-    if std::env::var("GUI1").is_ok() {
-        draw_gui(&maze, 1, 10.0).await;
+    if let Ok(gui1) = std::env::var("GUI1") {
+        match gui1.as_str() {
+            "1" => draw_gui(&maze, 1, 10.0).await,
+            "2" => draw_line_gui(&maze, 1).await,
+            _ => {}
+        }
     }
 
     let part2 = aoclib::read_lines("input/everybody_codes_e2025_q15_p2.txt");
     let maze = part2[0].parse::<Maze>().unwrap();
     println!("Quest 15, Part 2 = {}", maze.shortest_path());
 
-    if std::env::var("GUI2").is_ok() {
-        draw_gui(&maze, 100, 2.0).await;
+    if let Ok(gui2) = std::env::var("GUI2") {
+        match gui2.as_str() {
+            "1" => draw_gui(&maze, 100, 10.0).await,
+            "2" => draw_line_gui(&maze, 100).await,
+            _ => {}
+        }
+    }
+
+    let part3 = aoclib::read_lines("input/everybody_codes_e2025_q15_p3.txt");
+    let maze = part3[0].parse::<Maze>().unwrap();
+    println!("Quest 15, Part 3 = {}", maze.shortest_path());
+
+    if let Ok(gui3) = std::env::var("GUI3") {
+        match gui3.as_str() {
+            "1" => draw_gui(&maze, 100, 10.0).await,
+            "2" => draw_line_gui(&maze, 100).await,
+            _ => {}
+        }
+    }
+}
+
+async fn draw_line_gui(maze: &Maze, steps: usize) {
+    let mut neighbor_list = HashMap::<Point, Vec<(Point, usize)>>::new();
+
+    for path in &maze.path_lines {
+        let (start, end) = match path {
+            Line::Horizontal(Horizontal { start, end }) => (start, end),
+            Line::Vertical(Vertical { start, end }) => (start, end),
+        };
+        neighbor_list
+            .entry(*start)
+            .or_default()
+            .push((*end, start.dist_to(end)));
+        neighbor_list
+            .entry(*end)
+            .or_default()
+            .push((*start, start.dist_to(end)));
+    }
+
+    let mut visible_astar = Astar::new(
+        &Point(0, 0),
+        |point: &Point| {
+            // println!("searching from {point:?}");
+            if let Some(list) = neighbor_list.get(point) {
+                // println!("  > {list:?}");
+                list.clone()
+            } else {
+                // println!("  > none");
+                Vec::new()
+            }
+        },
+        |point: &Point| point.dist_to(&maze.end),
+        |point: &Point| maze.end == *point,
+    );
+
+    let result = 'out: loop {
+        for _ in 0..steps {
+            match visible_astar.step() {
+                StepResult::Answer(ans) => break 'out Some(ans),
+                StepResult::Ongoing => {}
+                StepResult::SearchFailure => break 'out None,
+            }
+        }
+        maze.draw_lines(&visible_astar.visited, None).await;
+    };
+
+    let result = if let Some((_, result)) = result {
+        Some(result)
+    } else {
+        None
+    };
+
+    while !is_mouse_button_pressed(MouseButton::Right) {
+        maze.draw_lines(&visible_astar.visited, result).await;
     }
 }
 
@@ -95,10 +172,6 @@ impl Maze {
             );
         }
 
-        for line in &self.wall_lines {
-            line.draw(trans_x, trans_y, scale, BLUE);
-        }
-
         for &Point(row, col) in visited {
             draw_rectangle(
                 trans_x + scale * col as f32,
@@ -128,9 +201,11 @@ impl Maze {
             );
         }
 
+        /*
         for line in &self.path_lines {
             line.draw(trans_x, trans_y, scale, BLUE);
         }
+        */
 
         draw_text(
             format!("Points visited: {}", visited.len()),
@@ -147,6 +222,112 @@ impl Maze {
         next_frame().await
     }
 
+    async fn draw_lines(&self, visited: &HashSet<Point>, dist: Option<usize>) {
+        clear_background(BLACK);
+        draw_line(0.0, 50.0, screen_width(), 50.0, 1.0, WHITE);
+
+        let (screen_width, screen_height) = (screen_width(), screen_height());
+
+        let maze_width = (self.lower_right.1 - self.upper_left.1) as f32 + 5.0;
+        let maze_height = (self.lower_right.0 - self.upper_left.0) as f32 + 5.0;
+
+        let xscale = screen_width / maze_width;
+        let yscale = screen_height / maze_height;
+
+        let tx = self.upper_left.1.abs() as f32 * xscale + 5.0;
+        let ty = self.upper_left.0.abs() as f32 * yscale + 55.0;
+
+        for line in &self.wall_lines {
+            line.draw(tx, ty, xscale, yscale, BLUE);
+        }
+
+        for op in &self.outer_points {
+            draw_circle(
+                tx + xscale / 2.0 + op.1 as f32 * xscale,
+                ty + yscale / 2.0 + op.0 as f32 * yscale,
+                2.0,
+                YELLOW,
+            );
+        }
+
+        for pl in &self.path_lines {
+            pl.draw(tx, ty, xscale, yscale, DARKBROWN);
+        }
+
+        for v in visited {
+            draw_circle(
+                tx + xscale / 2.0 + v.1 as f32 * xscale,
+                ty + yscale / 2.0 + v.0 as f32 * yscale,
+                2.0,
+                GREEN,
+            );
+        }
+
+        // start point
+        draw_circle(tx + xscale / 2.0, ty + yscale / 2.0, 2.0, RED);
+
+        // end point
+        draw_circle(
+            tx + xscale / 2.0 + self.end.1 as f32 * xscale,
+            ty + yscale / 2.0 + self.end.0 as f32 * yscale,
+            2.0,
+            RED,
+        );
+        draw_text(
+            format!("Points visited: {}", visited.len()),
+            5.0,
+            20.0,
+            24.0,
+            WHITE,
+        );
+
+        if let Some(dist) = dist {
+            draw_text(format!("Shortest distance: {dist}"), 5.0, 40.0, 24.0, WHITE);
+        }
+
+        next_frame().await;
+    }
+
+    fn shortest_path(&self) -> usize {
+        let mut neighbor_list = HashMap::<Point, Vec<(Point, usize)>>::new();
+
+        for path in &self.path_lines {
+            let (start, end) = match path {
+                Line::Horizontal(Horizontal { start, end }) => (start, end),
+                Line::Vertical(Vertical { start, end }) => (start, end),
+            };
+            neighbor_list
+                .entry(*start)
+                .or_default()
+                .push((*end, start.dist_to(end)));
+            neighbor_list
+                .entry(*end)
+                .or_default()
+                .push((*start, start.dist_to(end)));
+        }
+
+        if let Some(result) = aoclib::astar(
+            &Point(0, 0),
+            |point: &Point| {
+                // println!("searching from {point:?}");
+                if let Some(list) = neighbor_list.get(point) {
+                    //   println!("  > {list:?}");
+                    list.clone()
+                } else {
+                    // println!("  > none");
+                    Vec::new()
+                }
+            },
+            |point: &Point| point.dist_to(&self.end),
+            |point: &Point| self.end == *point,
+        ) {
+            result.1
+        } else {
+            0
+        }
+    }
+
+    /*
     fn shortest_path(&self) -> usize {
         aoclib::astar(
             &Point(0, 0),
@@ -169,6 +350,7 @@ impl Maze {
         .unwrap()
         .1
     }
+    */
 }
 
 impl FromStr for Maze {
@@ -182,7 +364,7 @@ impl FromStr for Maze {
         let mut lower_right = Point(0, 0);
         let mut outer_points = HashSet::new();
         let mut wall_lines = Vec::new();
-        let mut path_lines = Vec::new();
+        let mut path_lines = HashSet::new();
 
         for instruction in line.split(',') {
             let turn = &instruction[0..1];
@@ -211,10 +393,13 @@ impl FromStr for Maze {
 
             dir = new_dir;
             let start = end;
+            /*
             for _ in 0..amount {
                 end += dir;
                 walls.insert(end);
             }
+            */
+            end += dir * amount;
             wall_lines.push(Line::from_points(start, end));
 
             upper_left = Point(upper_left.0.min(end.0), upper_left.1.min(end.1));
@@ -228,18 +413,59 @@ impl FromStr for Maze {
         }
         outer_points.insert(end);
 
-        for op in &outer_points {
-            for other in &outer_points {
-                if op == other || (op.0 != other.0 && op.1 != other.1) {
+        outer_points.insert(Point(0, 0));
+
+        let valid_line = |line: &Line| {
+            line.has_point(&end)
+                || line.has_point(&Point(0, 0))
+                || !wall_lines.iter().any(|wall| line.intersects_with(wall))
+        };
+
+        for point1 in &outer_points {
+            for point2 in &outer_points {
+                if point1 == point2 {
                     continue;
                 }
-                let line = Line::from_points(*op, *other);
-                if wall_lines.iter().any(|wall| line.intersects_with(wall)) {
-                    continue;
+                if point1.0 == point2.0 || point1.1 == point2.1 {
+                    let line = Line::from_points(*point1, *point2);
+                    if !valid_line(&line) {
+                        continue;
+                    }
+                    path_lines.insert(line);
+                } else {
+                    //  a---------m
+                    //  |         |
+                    //  |         |
+                    //  n---------b
+                    let a = Point(point1.0.min(point2.0), point1.1.min(point2.1));
+                    let b = Point(point1.0.max(point2.0), point1.1.max(point2.1));
+
+                    let m = Point(point1.0.min(point2.0), point1.1.max(point2.1));
+                    let n = Point(point1.0.max(point2.0), point1.1.min(point2.1));
+
+                    let am = Line::from_points(a, m);
+                    let mb = Line::from_points(m, b);
+                    let an = Line::from_points(a, n);
+                    let nb = Line::from_points(n, b);
+
+                    if valid_line(&am) {
+                        path_lines.insert(am);
+                    }
+                    if valid_line(&mb) {
+                        path_lines.insert(mb);
+                    }
+                    if valid_line(&an) {
+                        path_lines.insert(an);
+                    }
+                    if valid_line(&nb) {
+                        path_lines.insert(nb);
+                    }
                 }
-                path_lines.push(line);
             }
         }
+
+        let path_lines = path_lines.into_iter().collect();
+        // println!("{path_lines:?}");
 
         walls.remove(&end);
 
@@ -261,6 +487,13 @@ struct Point(isize, isize); // Row, Col
 impl Point {
     fn dist_to(&self, end: &Point) -> usize {
         self.0.abs_diff(end.0) + self.1.abs_diff(end.1)
+    }
+}
+
+impl AddAssign for Point {
+    fn add_assign(&mut self, rhs: Self) {
+        self.0 += rhs.0;
+        self.1 += rhs.1;
     }
 }
 
@@ -319,6 +552,19 @@ impl AddAssign<Direction> for Point {
             Direction::Down => self.0 += 1,
             Direction::Left => self.1 -= 1,
             Direction::Right => self.1 += 1,
+        }
+    }
+}
+
+impl Mul<isize> for Direction {
+    type Output = Point;
+
+    fn mul(self, rhs: isize) -> Self::Output {
+        match self {
+            Direction::Up => Point(rhs * -1, 0),
+            Direction::Down => Point(rhs, 0),
+            Direction::Left => Point(0, rhs * -1),
+            Direction::Right => Point(0, rhs),
         }
     }
 }
@@ -444,7 +690,7 @@ enum StepResult<NODE> {
     SearchFailure,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Hash, PartialEq, Eq)]
 enum Line {
     Horizontal(Horizontal),
     Vertical(Vertical),
@@ -459,16 +705,16 @@ impl Line {
         }
     }
 
-    fn draw(&self, tx: f32, ty: f32, scale: f32, color: Color) {
+    fn draw(&self, tx: f32, ty: f32, xscale: f32, yscale: f32, color: Color) {
         let (x1, y1, x2, y2) = match self {
             Line::Horizontal(Horizontal { start, end }) => (start.1, start.0, end.1, end.0),
             Line::Vertical(Vertical { start, end }) => (start.1, start.0, end.1, end.0),
         };
         draw_line(
-            tx + scale / 2.0 + x1 as f32 * scale,
-            ty + scale / 2.0 + y1 as f32 * scale,
-            tx + scale / 2.0 + x2 as f32 * scale,
-            ty + scale / 2.0 + y2 as f32 * scale,
+            tx + xscale / 2.0 + x1 as f32 * xscale,
+            ty + yscale / 2.0 + y1 as f32 * yscale,
+            tx + xscale / 2.0 + x2 as f32 * xscale,
+            ty + yscale / 2.0 + y2 as f32 * yscale,
             1.0,
             color,
         );
@@ -482,9 +728,16 @@ impl Line {
             (Line::Vertical(v1), Line::Vertical(v2)) => v1.intersects_vert(v2),
         }
     }
+
+    fn has_point(&self, point: &Point) -> bool {
+        match self {
+            Line::Horizontal(h) => h.start == *point || h.end == *point,
+            Line::Vertical(v) => v.start == *point || v.end == *point,
+        }
+    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Hash, PartialEq, Eq)]
 struct Horizontal {
     start: Point,
     end: Point,
@@ -500,22 +753,22 @@ impl Horizontal {
     }
 
     fn intersects_vert(&self, vert: &Vertical) -> bool {
-        self.start.1 < vert.start.1
-            && self.end.1 > vert.end.1
-            && self.start.0 > vert.start.0
-            && self.end.0 < vert.end.0
+        self.start.1 <= vert.start.1
+            && self.end.1 >= vert.end.1
+            && self.start.0 >= vert.start.0
+            && self.end.0 <= vert.end.0
     }
 
     fn intersects_horiz(&self, other: &Horizontal) -> bool {
         self.start.0 == other.start.0
-            && ((self.start.1 < other.start.1 && self.end.1 > other.end.1)
-                || (self.start.1 < other.start.1 && self.end.1 > other.start.1)
-                || (self.start.1 < other.end.1 && self.end.1 > other.end.1)
-                || (self.start.1 > other.start.1 && self.end.1 < other.end.1))
+            && ((self.start.1 <= other.start.1 && self.end.1 >= other.end.1)
+                || (self.start.1 <= other.start.1 && self.end.1 >= other.start.1)
+                || (self.start.1 <= other.end.1 && self.end.1 >= other.end.1)
+                || (self.start.1 >= other.start.1 && self.end.1 <= other.end.1))
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Hash, PartialEq, Eq)]
 struct Vertical {
     start: Point,
     end: Point,
@@ -536,8 +789,8 @@ impl Vertical {
 
     fn intersects_vert(&self, other: &Vertical) -> bool {
         self.start.1 == other.start.1
-            && ((self.start.0 < other.start.0 && self.end.0 > other.end.0)
-                || (self.start.0 < other.start.0 && self.end.0 > other.start.0)
-                || (self.start.0 < other.end.0 && self.end.0 > other.end.0))
+            && ((self.start.0 <= other.start.0 && self.end.0 >= other.end.0)
+                || (self.start.0 <= other.start.0 && self.end.0 >= other.start.0)
+                || (self.start.0 <= other.end.0 && self.end.0 >= other.end.0))
     }
 }
