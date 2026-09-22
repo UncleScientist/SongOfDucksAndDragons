@@ -7,7 +7,18 @@ fn main() {
 
     let lines = aoclib::read_lines("input/everybody_codes_e2025_q16_p2.txt");
     let spell = lines[0].parse::<Spell>().unwrap();
-    println!("Quest 16, Part 2 = {}", spell.find_spell_for_wall());
+    println!(
+        "Quest 16, Part 2 = {}",
+        spell.find_spell_for_wall().iter().product::<usize>()
+    );
+
+    let lines = aoclib::read_lines("input/everybody_codes_e2025_q16_p3.txt");
+    let spell = lines[0].parse::<Spell>().unwrap();
+    let wall: Wall = spell.into();
+    println!(
+        "Quest 16, Part 3 = {:?}",
+        wall.length_needed_for_blocks(202520252025000)
+    );
 }
 
 #[derive(Debug)]
@@ -18,6 +29,22 @@ struct Wall {
 impl Wall {
     fn blocks_needed_for_length(&self, length: usize) -> usize {
         self.spell.iter().map(|num| length / num).sum()
+    }
+
+    fn length_needed_for_blocks(&self, blocks: usize) -> usize {
+        let mut low = 1;
+        let mut high = usize::MAX / 2;
+        while low < high {
+            let midpoint = (low + high).div_ceil(2);
+            let blocks_needed = self.blocks_needed_for_length(midpoint);
+            if blocks_needed <= blocks {
+                low = midpoint;
+            } else {
+                high = midpoint - 1;
+            }
+        }
+
+        low
     }
 }
 
@@ -37,7 +64,7 @@ struct Spell {
 }
 
 impl Spell {
-    fn find_spell_for_wall(&self) -> usize {
+    fn find_spell_for_wall(&self) -> Vec<usize> {
         let mut entries = Vec::new();
         let mut working_list = self.wall.clone();
         while let Some(index) = working_list.iter().position(|num| *num == 1) {
@@ -49,7 +76,7 @@ impl Spell {
             }
         }
 
-        entries.iter().product()
+        entries
     }
 }
 
@@ -60,6 +87,14 @@ impl FromStr for Spell {
         Ok(Self {
             wall: line.split(',').map(|txt| txt.parse().unwrap()).collect(),
         })
+    }
+}
+
+impl From<Spell> for Wall {
+    fn from(spell: Spell) -> Self {
+        Wall {
+            spell: spell.find_spell_for_wall(),
+        }
     }
 }
 
@@ -78,6 +113,18 @@ mod test {
         let spell = "1,2,2,2,2,3,1,2,3,3,1,3,1,2,3,2,1,4,1,3,2,2,1,3,2,2"
             .parse::<Spell>()
             .unwrap();
-        assert_eq!(270, spell.find_spell_for_wall());
+        assert_eq!(270, spell.find_spell_for_wall().iter().product::<usize>());
+    }
+
+    #[test]
+    fn test_part_3() {
+        let spell = "1,2,2,2,2,3,1,2,3,3,1,3,1,2,3,2,1,4,1,3,2,2,1,3,2,2"
+            .parse::<Spell>()
+            .unwrap();
+        let wall: Wall = spell.into();
+        assert_eq!(
+            94439495762954,
+            wall.length_needed_for_blocks(202520252025000)
+        );
     }
 }
