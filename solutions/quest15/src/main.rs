@@ -12,39 +12,26 @@ use macroquad::prelude::*;
 async fn main() {
     let part1 = aoclib::read_lines("input/everybody_codes_e2025_q15_p1.txt");
     let maze = part1[0].parse::<Maze>().unwrap();
-    // let maze = "R3,R4,R5,R6".parse::<Maze>().unwrap();
     println!("Quest 15, Part 1 = {}", maze.shortest_path());
 
-    if let Ok(gui1) = std::env::var("GUI1") {
-        match gui1.as_str() {
-            "1" => draw_gui(&maze, 1, 10.0).await,
-            "2" => draw_line_gui(&maze, 1).await,
-            _ => {}
-        }
+    if std::env::var("GUI1").is_ok() {
+        draw_line_gui(&maze, 1).await;
     }
 
     let part2 = aoclib::read_lines("input/everybody_codes_e2025_q15_p2.txt");
     let maze = part2[0].parse::<Maze>().unwrap();
     println!("Quest 15, Part 2 = {}", maze.shortest_path());
 
-    if let Ok(gui2) = std::env::var("GUI2") {
-        match gui2.as_str() {
-            "1" => draw_gui(&maze, 100, 10.0).await,
-            "2" => draw_line_gui(&maze, 100).await,
-            _ => {}
-        }
+    if std::env::var("GUI2").is_ok() {
+        draw_line_gui(&maze, 10).await;
     }
 
     let part3 = aoclib::read_lines("input/everybody_codes_e2025_q15_p3.txt");
     let maze = part3[0].parse::<Maze>().unwrap();
     println!("Quest 15, Part 3 = {}", maze.shortest_path());
 
-    if let Ok(gui3) = std::env::var("GUI3") {
-        match gui3.as_str() {
-            "1" => draw_gui(&maze, 100, 10.0).await,
-            "2" => draw_line_gui(&maze, 100).await,
-            _ => {}
-        }
+    if std::env::var("GUI3").is_ok() {
+        draw_line_gui(&maze, 20).await;
     }
 }
 
@@ -104,124 +91,17 @@ async fn draw_line_gui(maze: &Maze, steps: usize) {
     }
 }
 
-async fn draw_gui(maze: &Maze, steps: usize, scale: f32) {
-    let neighbors = |point: &Point| {
-        DIRS.iter()
-            .map(|dir| *point + *dir)
-            .filter(|point| !maze.walls.contains(point))
-            .filter(|point| {
-                point.0 >= maze.upper_left.0
-                    && point.0 <= maze.lower_right.0
-                    && point.1 >= maze.upper_left.1
-                    && point.1 <= maze.lower_right.1
-            })
-            .map(|point| (point, 1))
-            .collect()
-    };
-    let heuristic = |point: &Point| point.dist_to(&maze.end);
-    let is_end = |point: &Point| maze.end == *point;
-
-    let mut visible_astar = Astar::new(&Point(0, 0), neighbors, heuristic, is_end);
-
-    let result = 'out: loop {
-        for _ in 0..steps {
-            match visible_astar.step() {
-                StepResult::Answer(ans) => break 'out Some(ans),
-                StepResult::Ongoing => {}
-                StepResult::SearchFailure => break 'out None,
-            }
-        }
-        maze.draw(&visible_astar.visited, None, scale).await;
-    };
-
-    let result = if let Some((_, result)) = result {
-        Some(result)
-    } else {
-        None
-    };
-
-    while !is_mouse_button_pressed(MouseButton::Right) {
-        maze.draw(&visible_astar.visited, result, scale).await;
-    }
-}
-
 #[derive(Debug)]
 struct Maze {
     end: Point,
     upper_left: Point,
     lower_right: Point,
-    walls: HashSet<Point>,
     outer_points: HashSet<Point>,
     wall_lines: Vec<Line>,
     path_lines: Vec<Line>,
 }
 
 impl Maze {
-    async fn draw(&self, visited: &HashSet<Point>, dist: Option<usize>, scale: f32) {
-        let trans_x = self.upper_left.1.abs() as f32 * scale;
-        let trans_y = self.upper_left.0.abs() as f32 * scale + 55.0;
-        clear_background(BLACK);
-        draw_line(0.0, 50.0, screen_width(), 50.0, 1.0, WHITE);
-        for wall in &self.walls {
-            draw_rectangle(
-                trans_x + wall.1 as f32 * scale,
-                trans_y + wall.0 as f32 * scale,
-                scale - 1.0,
-                scale - 1.0,
-                DARKBLUE,
-            );
-        }
-
-        for &Point(row, col) in visited {
-            draw_rectangle(
-                trans_x + scale * col as f32,
-                trans_y + scale * row as f32,
-                scale - 1.0,
-                scale - 1.0,
-                DARKGREEN,
-            );
-        }
-
-        draw_rectangle(trans_x, trans_y, scale - 1.0, scale - 1.0, RED);
-        draw_rectangle(
-            trans_x + scale * self.end.1 as f32,
-            trans_y + scale * self.end.0 as f32,
-            scale - 1.0,
-            scale - 1.0,
-            RED,
-        );
-
-        for &Point(row, col) in &self.outer_points {
-            draw_rectangle(
-                trans_x + scale * col as f32,
-                trans_y + scale * row as f32,
-                scale - 1.0,
-                scale - 1.0,
-                YELLOW,
-            );
-        }
-
-        /*
-        for line in &self.path_lines {
-            line.draw(trans_x, trans_y, scale, BLUE);
-        }
-        */
-
-        draw_text(
-            format!("Points visited: {}", visited.len()),
-            5.0,
-            20.0,
-            24.0,
-            WHITE,
-        );
-
-        if let Some(dist) = dist {
-            draw_text(format!("Shortest distance: {dist}"), 5.0, 40.0, 24.0, WHITE);
-        }
-
-        next_frame().await
-    }
-
     async fn draw_lines(&self, visited: &HashSet<Point>, dist: Option<usize>) {
         clear_background(BLACK);
         draw_line(0.0, 50.0, screen_width(), 50.0, 1.0, WHITE);
@@ -326,31 +206,6 @@ impl Maze {
             0
         }
     }
-
-    /*
-    fn shortest_path(&self) -> usize {
-        aoclib::astar(
-            &Point(0, 0),
-            |point: &Point| {
-                DIRS.iter()
-                    .map(|dir| *point + *dir)
-                    .filter(|point| !self.walls.contains(point))
-                    .filter(|point| {
-                        point.0 >= self.upper_left.0
-                            && point.0 <= self.lower_right.0
-                            && point.1 >= self.upper_left.1
-                            && point.1 <= self.lower_right.1
-                    })
-                    .map(|point| (point, 1))
-                    .collect()
-            },
-            |point: &Point| point.dist_to(&self.end),
-            |point: &Point| self.end == *point,
-        )
-        .unwrap()
-        .1
-    }
-    */
 }
 
 impl FromStr for Maze {
@@ -358,7 +213,6 @@ impl FromStr for Maze {
 
     fn from_str(line: &str) -> Result<Self, Self::Err> {
         let mut end = Point(0, 0);
-        let mut walls = HashSet::new();
         let mut dir = Direction::Up;
         let mut upper_left = Point(0, 0);
         let mut lower_right = Point(0, 0);
@@ -393,12 +247,6 @@ impl FromStr for Maze {
 
             dir = new_dir;
             let start = end;
-            /*
-            for _ in 0..amount {
-                end += dir;
-                walls.insert(end);
-            }
-            */
             end += dir * amount;
             wall_lines.push(Line::from_points(start, end));
 
@@ -406,14 +254,8 @@ impl FromStr for Maze {
             lower_right = Point(lower_right.0.max(end.0), lower_right.1.max(end.1));
         }
 
-        for start in [Point(-1, 0), Point(1, 0), Point(0, -1), Point(0, 1)] {
-            if !walls.contains(&start) {
-                outer_points.insert(start);
-            }
-        }
-        outer_points.insert(end);
-
         outer_points.insert(Point(0, 0));
+        outer_points.insert(end);
 
         let valid_line = |line: &Line| !wall_lines.iter().any(|wall| line.intersects_with(wall));
 
@@ -463,13 +305,10 @@ impl FromStr for Maze {
         let path_lines = path_lines.into_iter().collect();
         // println!("{path_lines:?}");
 
-        walls.remove(&end);
-
         Ok(Self {
             end,
             upper_left,
             lower_right,
-            walls,
             outer_points,
             wall_lines,
             path_lines,
@@ -500,13 +339,6 @@ enum Direction {
     Left,
     Right,
 }
-
-const DIRS: [Direction; 4] = [
-    Direction::Up,
-    Direction::Down,
-    Direction::Left,
-    Direction::Right,
-];
 
 impl Direction {
     fn turn_left(&self) -> Self {
