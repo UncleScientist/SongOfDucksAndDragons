@@ -415,11 +415,7 @@ impl FromStr for Maze {
 
         outer_points.insert(Point(0, 0));
 
-        let valid_line = |line: &Line| {
-            line.has_point(&end)
-                || line.has_point(&Point(0, 0))
-                || !wall_lines.iter().any(|wall| line.intersects_with(wall))
-        };
+        let valid_line = |line: &Line| !wall_lines.iter().any(|wall| line.intersects_with(wall));
 
         for point1 in &outer_points {
             for point2 in &outer_points {
@@ -561,9 +557,9 @@ impl Mul<isize> for Direction {
 
     fn mul(self, rhs: isize) -> Self::Output {
         match self {
-            Direction::Up => Point(rhs * -1, 0),
+            Direction::Up => Point(-rhs, 0),
             Direction::Down => Point(rhs, 0),
-            Direction::Left => Point(0, rhs * -1),
+            Direction::Left => Point(0, -rhs),
             Direction::Right => Point(0, rhs),
         }
     }
@@ -728,13 +724,6 @@ impl Line {
             (Line::Vertical(v1), Line::Vertical(v2)) => v1.intersects_vert(v2),
         }
     }
-
-    fn has_point(&self, point: &Point) -> bool {
-        match self {
-            Line::Horizontal(h) => h.start == *point || h.end == *point,
-            Line::Vertical(v) => v.start == *point || v.end == *point,
-        }
-    }
 }
 
 #[derive(Debug, Hash, PartialEq, Eq)]
@@ -753,18 +742,18 @@ impl Horizontal {
     }
 
     fn intersects_vert(&self, vert: &Vertical) -> bool {
-        self.start.1 <= vert.start.1
-            && self.end.1 >= vert.end.1
-            && self.start.0 >= vert.start.0
-            && self.end.0 <= vert.end.0
+        self.start.1 < vert.start.1
+            && self.end.1 > vert.end.1
+            && self.start.0 > vert.start.0
+            && self.end.0 < vert.end.0
     }
 
     fn intersects_horiz(&self, other: &Horizontal) -> bool {
         self.start.0 == other.start.0
-            && ((self.start.1 <= other.start.1 && self.end.1 >= other.end.1)
-                || (self.start.1 <= other.start.1 && self.end.1 >= other.start.1)
-                || (self.start.1 <= other.end.1 && self.end.1 >= other.end.1)
-                || (self.start.1 >= other.start.1 && self.end.1 <= other.end.1))
+            && ((self.start.1 < other.start.1 && self.end.1 > other.end.1)
+                || (self.start.1 < other.start.1 && self.end.1 > other.start.1)
+                || (self.start.1 < other.end.1 && self.end.1 > other.end.1)
+                || (self.start.1 > other.start.1 && self.end.1 < other.end.1))
     }
 }
 
@@ -789,8 +778,8 @@ impl Vertical {
 
     fn intersects_vert(&self, other: &Vertical) -> bool {
         self.start.1 == other.start.1
-            && ((self.start.0 <= other.start.0 && self.end.0 >= other.end.0)
-                || (self.start.0 <= other.start.0 && self.end.0 >= other.start.0)
-                || (self.start.0 <= other.end.0 && self.end.0 >= other.end.0))
+            && ((self.start.0 < other.start.0 && self.end.0 > other.end.0)
+                || (self.start.0 < other.start.0 && self.end.0 > other.start.0)
+                || (self.start.0 < other.end.0 && self.end.0 > other.end.0))
     }
 }
