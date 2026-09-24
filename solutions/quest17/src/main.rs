@@ -69,58 +69,16 @@ impl Volcano {
 mod test {
     use super::*;
 
-    const TEST_INPUT1: &str = r#"189482189843433862719
-279415473483436249988
-432746714658787816631
-428219317375373724944
-938163982835287292238
-627369424372196193484
-539825864246487765271
-517475755641128575965
-685934212385479112825
-815992793826881115341
-1737798467@7983146242
-867597735651751839244
-868364647534879928345
-519348954366296559425
-134425275832833829382
-764324337429656245499
-654662236199275446914
-317179356373398118618
-542673939694417586329
-987342622289291613318
-971977649141188759131"#;
-
-    const TEST_INPUT2: &str = r#"4547488458944
-9786999467759
-6969499575989
-7775645848998
-6659696497857
-5569777444746
-968586@767979
-6476956899989
-5659745697598
-6874989897744
-6479994574886
-6694118785585
-9568991647449"#;
-
     #[test]
     fn test_part_1() {
-        let lines = TEST_INPUT1
-            .split('\n')
-            .map(|line| line.to_string())
-            .collect::<Vec<_>>();
+        let lines = aoclib::read_lines("test-input/part1");
         let volcano = Volcano::new(&lines);
         assert_eq!(1573, volcano.total_sum_at_radius(10));
     }
 
     #[test]
     fn test_part_2() {
-        let lines = TEST_INPUT2
-            .split('\n')
-            .map(|line| line.to_string())
-            .collect::<Vec<_>>();
+        let lines = aoclib::read_lines("test-input/part2");
         let volcano = Volcano::new(&lines);
         assert_eq!(26, volcano.sum_at_radius(1));
         assert_eq!(49, volcano.sum_at_radius(2));
@@ -132,10 +90,7 @@ mod test {
 
     #[test]
     fn test_part_2_max() {
-        let lines = TEST_INPUT2
-            .split('\n')
-            .map(|line| line.to_string())
-            .collect::<Vec<_>>();
+        let lines = aoclib::read_lines("test-input/part2");
         let volcano = Volcano::new(&lines);
         assert_eq!(1090, volcano.max_destruction_product());
     }
