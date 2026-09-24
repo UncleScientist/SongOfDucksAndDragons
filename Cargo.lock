@@ -379,6 +379,7 @@ name = "quest17"
 version = "0.1.0"
 dependencies = [
  "aoclib",
+ "macroquad",
 ]
 
 [[package]]
