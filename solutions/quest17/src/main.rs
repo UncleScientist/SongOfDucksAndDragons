@@ -1,3 +1,8 @@
+use std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    hash::Hash,
+};
+
 use macroquad::prelude::*;
 
 // mod drawing;
@@ -14,8 +19,9 @@ async fn main() {
 
     let lines = aoclib::read_lines("input/everybody_codes_e2025_q17_p3.txt");
     let volcano = Volcano::new(&lines);
-    volcano.draw().await;
-    println!("{}", volcano.find_path());
+    let (radius, answer) = volcano.find_path().unwrap();
+    println!("Quest 17, Part 3 = {answer}");
+    volcano.draw(radius - 1).await;
     // drawing::draw_x(37, 53).await;
 }
 
@@ -86,11 +92,38 @@ impl Volcano {
         radius * amount
     }
 
-    async fn draw(&self) {
+    async fn draw(&self, radius: usize) {
         let (width, height) = (self.grid[0].len(), self.grid.len());
         let (w, h) = (width as f32, height as f32);
 
+        let mut visited = HashMap::<(usize, usize), bool>::new();
+        let mut astar = Astar::new(
+            &SearchPoint::new(self.start, radius),
+            |point: &SearchPoint| self.find_neighbors(point),
+            |point: &SearchPoint| self.calc_heuristic(point),
+            |point: &SearchPoint| point.loc == self.start && point.toured,
+        );
+        let mut stop = false;
+
         loop {
+            if !stop {
+                for _ in 0..50 {
+                    match astar.step() {
+                        StepResult::Answer(_) => {
+                            stop = true;
+                        }
+                        StepResult::Ongoing => {}
+                        StepResult::SearchFailure => {
+                            stop = true;
+                        }
+                    }
+                    if stop {
+                        break;
+                    }
+                }
+                visited = astar.visited.iter().map(|sp| (sp.loc, sp.toured)).collect();
+            }
+
             let (sw, sh) = (screen_width(), screen_height());
             let (scaled_w, scaled_h) = (sw / w, sh / h);
 
@@ -99,18 +132,20 @@ impl Volcano {
                     let (rowf, colf) = (row as f32, col as f32);
                     let rscale = rowf / h;
                     let cscale = colf / w;
-                    let val = if self.source == (row, col) {
-                        0.0
-                    } else if self.start == (row, col) {
-                        0.25
+                    let color = if self.start == (row, col) {
+                        DARKGREEN
+                    } else if self.source == (row, col) {
+                        BLACK
+                    } else if let Some(toured) = visited.get(&(row, col)) {
+                        if *toured { PINK } else { WHITE }
                     } else {
-                        0.5 + 0.5 * self.grid[row][col] as f32 / 9.0
-                    };
-                    let color = match (rscale > cscale, rscale > 1.0 - cscale) {
-                        (true, true) => Color::new(0.0, 0.0, val, 1.0), // bottom
-                        (true, false) => Color::new(0.0, val, 0.0, 1.0), // left
-                        (false, true) => Color::new(val, 0.0, 0.0, 1.0), // right
-                        (false, false) => Color::new(val, val, 0.0, 1.0), // top
+                        let val = 0.5 + 0.5 * self.grid[row][col] as f32 / 9.0;
+                        match (rscale > cscale, rscale > 1.0 - cscale) {
+                            (true, true) => Color::new(0.0, 0.0, val, 1.0), // bottom
+                            (true, false) => Color::new(0.0, val, 0.0, 1.0), // left
+                            (false, true) => Color::new(val, 0.0, 0.0, 1.0), // right
+                            (false, false) => Color::new(val, val, 0.0, 1.0), // top
+                        }
                     };
                     draw_rectangle(colf * scaled_w, rowf * scaled_h, scaled_w, scaled_h, color);
                 }
@@ -121,16 +156,19 @@ impl Volcano {
     }
 
     // final answer: time taken * volano radius
-    fn find_path(&self) -> usize {
-        let endpoint = SearchPoint::end(self.start);
-        aoclib::astar(
-            &SearchPoint::new(self.start),
-            |point: &SearchPoint| self.find_neighbors(point),
-            |point: &SearchPoint| self.calc_heuristic(point),
-            |point: &SearchPoint| *point == endpoint,
-        )
-        .unwrap()
-        .1
+    fn find_path(&self) -> Option<(usize, usize)> {
+        for radius in 1..self.grid.len().min(self.grid[0].len()) / 2 {
+            if let Some(answer) = aoclib::astar(
+                &SearchPoint::new(self.start, radius),
+                |point: &SearchPoint| self.find_neighbors(point),
+                |point: &SearchPoint| self.calc_heuristic(point),
+                |point: &SearchPoint| point.loc == self.start && point.toured,
+            ) && answer.1 < (radius + 1) * 30
+            {
+                return Some((radius, answer.1 * radius));
+            }
+        }
+        None
     }
 
     fn find_neighbors(&self, point: &SearchPoint) -> Vec<(SearchPoint, usize)> {
@@ -173,15 +211,13 @@ impl Volcano {
         let cost = self.grid[row][col] as usize;
 
         // find out if the volcano reached us
-        let time_so_far = point.time + cost;
-        let radius = time_so_far / 30;
-        if self.within(row, col, radius) {
+        if self.within(row, col, point.radius) {
             return None;
         }
 
         let sector = self.get_sector(row, col);
         if sector == point.sector || sector == (point.sector + 1) % 4 {
-            Some((point.shift(row, col, cost, sector != 0), cost))
+            Some((point.shift(row, col, point.radius, sector), cost))
         } else {
             None
         }
@@ -204,34 +240,104 @@ impl Volcano {
 #[derive(Debug, Default, Hash, Eq, PartialEq, Copy, Clone)]
 struct SearchPoint {
     loc: (usize, usize), // row, col
-    time: usize,
     sector: usize,
+    radius: usize,
     toured: bool, // true if visited more than one sector
 }
 
 impl SearchPoint {
-    fn new(loc: (usize, usize)) -> Self {
+    fn new(loc: (usize, usize), radius: usize) -> Self {
         Self {
             loc,
+            radius,
             ..Default::default()
         }
     }
 
-    fn end(loc: (usize, usize)) -> Self {
-        Self {
-            loc,
-            toured: true,
-            ..Default::default()
-        }
-    }
-
-    fn shift(&self, row: usize, col: usize, cost: usize, toured: bool) -> Self {
+    fn shift(&self, row: usize, col: usize, radius: usize, sector: usize) -> Self {
         SearchPoint {
             loc: (row, col),
-            sector: self.sector,
-            time: self.time + cost,
-            toured: self.toured || toured,
+            sector,
+            radius,
+            toured: self.toured || sector != 0,
         }
+    }
+}
+
+#[derive(Debug)]
+enum StepResult<NODE> {
+    Answer((NODE, usize)),
+    Ongoing,
+    SearchFailure,
+}
+
+struct Astar<NODE, FN, FH, FEND> {
+    queue: BTreeMap<(usize, usize), HashSet<NODE>>,
+    visited: HashSet<NODE>,
+    dist: HashMap<NODE, Option<usize>>,
+    neighbors: FN,
+    heuristic: FH,
+    is_end: FEND,
+}
+
+impl<NODE, FN, FH, FEND> Astar<NODE, FN, FH, FEND>
+where
+    NODE: Hash + PartialEq + Eq + Copy,
+    FN: Fn(&NODE) -> Vec<(NODE, usize)>,
+    FH: Fn(&NODE) -> usize,
+    FEND: Fn(&NODE) -> bool,
+{
+    fn new(start: &NODE, neighbors: FN, heuristic: FH, is_end: FEND) -> Self {
+        Self {
+            queue: BTreeMap::from([((0, 0), HashSet::from([*start]))]),
+            visited: HashSet::new(),
+            dist: HashMap::new(),
+            neighbors,
+            heuristic,
+            is_end,
+        }
+    }
+
+    fn _reset(&mut self, start: &NODE) {
+        self.queue = BTreeMap::from([((0, 0), HashSet::from([*start]))]);
+        self.visited = HashSet::new();
+        self.dist = HashMap::new();
+    }
+
+    fn step(&mut self) -> StepResult<NODE> {
+        let Some(((h, time), pos_list)) = self.queue.pop_first() else {
+            return StepResult::SearchFailure;
+        };
+
+        for pos in pos_list.iter() {
+            if (self.is_end)(pos) {
+                return StepResult::Answer((*pos, time));
+            }
+            if self.visited.insert(*pos) {
+                for (new_pos, cost) in (self.neighbors)(pos) {
+                    let new_time = time + cost;
+                    let new_h = new_time + (self.heuristic)(&new_pos);
+
+                    let dist_entry = self.dist.entry(new_pos).or_insert(None);
+                    if let Some(dist_time) = dist_entry {
+                        if new_time >= *dist_time {
+                            continue;
+                        }
+
+                        if let Some(qentry) = self.queue.get_mut(&(h, *dist_time)) {
+                            qentry.remove(pos);
+                        }
+                    }
+                    *dist_entry = Some(new_time);
+                    self.queue
+                        .entry((new_h, new_time))
+                        .or_default()
+                        .insert(new_pos);
+                }
+            }
+        }
+
+        StepResult::Ongoing
     }
 }
 
@@ -270,5 +376,19 @@ mod test {
         let lines = aoclib::read_lines("test-input/part3.1");
         let volcano = Volcano::new(&lines);
         assert_eq!(592, volcano.find_path());
+    }
+
+    #[test]
+    fn test_part_3_2() {
+        let lines = aoclib::read_lines("test-input/part3.2");
+        let volcano = Volcano::new(&lines);
+        assert_eq!(330, volcano.find_path());
+    }
+
+    #[test]
+    fn test_part_3_3() {
+        let lines = aoclib::read_lines("test-input/part3.3");
+        let volcano = Volcano::new(&lines);
+        assert_eq!(3180, volcano.find_path());
     }
 }
