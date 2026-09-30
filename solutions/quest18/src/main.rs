@@ -4,17 +4,38 @@ fn main() {
     let data = aoclib::read_text_records("input/everybody_codes_e2025_q18_p1.txt");
     let garden = Garden::new(&data);
     println!("Quest 18, part 1 = {}", garden.total_energy());
+
+    let data = aoclib::read_text_records("input/everybody_codes_e2025_q18_p2.txt");
+    let garden = Garden::new(&data);
+    println!("Quest 18, part 2 = {}", garden.total_energy());
 }
 
 #[derive(Debug)]
 struct Garden {
     plants: Vec<Plant>,
+    test_cases: Vec<Vec<isize>>,
 }
 
 impl Garden {
     fn new(lines: &[String]) -> Self {
+        let has_test_cases =
+            lines[lines.len() - 1].starts_with("\n0") || lines[lines.len() - 1].starts_with("\n1");
+
+        let (test_cases, limit) = if has_test_cases {
+            (
+                Self::extract_test_cases(&lines[lines.len() - 1]),
+                lines.len() - 1,
+            )
+        } else {
+            (vec![vec![1isize; lines.len()]], lines.len())
+        };
+
         Self {
-            plants: lines.iter().map(|line| line.parse().unwrap()).collect(),
+            plants: lines[0..limit]
+                .iter()
+                .map(|line| line.parse().unwrap())
+                .collect(),
+            test_cases,
         }
     }
 
@@ -30,20 +51,26 @@ impl Garden {
         mentioned.iter().position(|p| !*p).unwrap() + 1
     }
 
-    fn total_energy(&self) -> usize {
-        let last_plant_id = self.last_plant_id();
-        self.energy_by_plant_id(last_plant_id)
+    fn total_energy(&self) -> isize {
+        (0..self.test_cases.len())
+            .map(|case| self.energy_for_test_case(case))
+            .sum()
     }
 
-    fn energy_by_plant_id(&self, plant_id: usize) -> usize {
+    fn energy_for_test_case(&self, test_case: usize) -> isize {
+        let last_plant_id = self.last_plant_id();
+        self.energy_by_plant_id(last_plant_id, test_case)
+    }
+
+    fn energy_by_plant_id(&self, plant_id: usize, test_case: usize) -> isize {
         let mut total = 0;
         for branch in &self.plants[plant_id - 1].branches {
             total += match branch {
-                Branch::Free => 1,
+                Branch::Free => self.test_cases[test_case][plant_id - 1],
                 Branch::Connected {
                     plant_id,
                     thickness,
-                } => *thickness * self.energy_by_plant_id(*plant_id),
+                } => *thickness * self.energy_by_plant_id(*plant_id, test_case),
             };
         }
         if total < self.plants[plant_id - 1].thickness {
@@ -52,18 +79,30 @@ impl Garden {
             total
         }
     }
+
+    fn extract_test_cases(lines: &str) -> Vec<Vec<isize>> {
+        lines
+            .split('\n')
+            .filter(|line| !line.is_empty())
+            .map(|line| {
+                line.split(' ')
+                    .map(|digit| digit.parse().unwrap())
+                    .collect()
+            })
+            .collect()
+    }
 }
 
 #[derive(Debug)]
 struct Plant {
-    thickness: usize,
+    thickness: isize,
     branches: Vec<Branch>,
 }
 
 #[derive(Debug)]
 enum Branch {
     Free,
-    Connected { plant_id: usize, thickness: usize },
+    Connected { plant_id: usize, thickness: isize },
 }
 
 impl FromStr for Plant {
@@ -82,13 +121,15 @@ impl FromStr for Plant {
                 thickness = thickstr.parse().unwrap();
             } else if words[1] == "free" {
                 branches.push(Branch::Free)
-            } else {
+            } else if words[1] == "branch" {
                 let plant_id = words[4].parse().unwrap();
                 let thickness = words[7].parse().unwrap();
                 branches.push(Branch::Connected {
                     plant_id,
                     thickness,
                 });
+            } else {
+                panic!("invalid plant");
             }
         }
         Ok(Plant {
@@ -113,6 +154,13 @@ mod test {
     fn test_part_1() {
         let data = aoclib::read_text_records("test-input/part1");
         let garden = Garden::new(&data);
-        assert_eq!(774, garden.total_energy());
+        assert_eq!(774, garden.energy_for_test_case(0));
+    }
+
+    #[test]
+    fn test_part_2() {
+        let data = aoclib::read_text_records("test-input/part2");
+        let garden = Garden::new(&data);
+        assert_eq!(324, garden.total_energy());
     }
 }
