@@ -10,6 +10,10 @@ fn main() {
     let data = aoclib::read_lines("input/everybody_codes_e2025_q19_p1.txt");
     let game = Game::new(data);
     println!("Quest 19, part 1 = {}", game.find_path());
+
+    let data = aoclib::read_lines("input/everybody_codes_e2025_q19_p2.txt");
+    let game = Game::new(data);
+    println!("Quest 19, part 2 = {}", game.find_path());
 }
 
 struct Game {
@@ -205,6 +209,13 @@ mod test {
         let data = aoclib::read_lines("test-input/part1");
         let game = Game::new(data);
         assert_eq!(24, game.find_path());
+    }
+
+    #[test]
+    fn test_part_2() {
+        let data = aoclib::read_lines("test-input/part2");
+        let game = Game::new(data);
+        assert_eq!(22, game.find_path());
     }
 
     #[test]
