@@ -14,6 +14,10 @@ fn main() {
     let data = aoclib::read_lines("input/everybody_codes_e2025_q19_p2.txt");
     let game = Game::new(data);
     println!("Quest 19, part 2 = {}", game.find_path());
+
+    let data = aoclib::read_lines("input/everybody_codes_e2025_q19_p3.txt");
+    let game = Game::new(data);
+    println!("Quest 19, part 3 = {}", game.find_path());
 }
 
 struct Game {
@@ -157,17 +161,6 @@ struct Wall {
     dist: usize,
     bottom: usize,
     opening: usize,
-}
-
-impl Wall {
-    #[cfg(test)]
-    fn make(dist: usize, bottom: usize, opening: usize) -> Self {
-        Self {
-            dist,
-            bottom,
-            opening,
-        }
-    }
 }
 
 impl FromStr for Wall {
