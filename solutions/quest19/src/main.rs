@@ -7,47 +7,50 @@
 use std::{convert::Infallible, str::FromStr};
 
 fn main() {
-    // let data = aoclib::read_lines("input/everybody_codes_e2025_q19_p1.txt");
-    let data = aoclib::read_lines("test-input/part1");
+    let data = aoclib::read_lines("input/everybody_codes_e2025_q19_p1.txt");
     let walls = data
         .iter()
         .map(|line| line.parse::<Wall>().unwrap())
         .collect::<Vec<_>>();
-    let end = walls.last().unwrap().dist;
-    let bird = Bird::new(0, 0);
-    let answer = aoclib::astar(
-        &(0, bird),
-        |pos: &(usize, Bird)| {
-            let dist = walls[pos.0].dist - pos.1.x;
-            println!("{dist}");
-            let result = if let Some(range) = pos.1.y_range(&walls[pos.0]) {
-                println!("> {range:?}");
-                (range.0..=range.1)
-                    .step_by(2)
-                    .map(|height| {
-                        let cost = pos.1.flaps_to(height, dist);
-                        let new_x = pos.1.x + dist;
-                        let new_y = height;
-                        ((pos.0 + 1, Bird::new(new_x, new_y)), cost)
-                    })
-                    .collect::<Vec<_>>()
-            } else {
-                Vec::new()
-            };
-            println!("From: {pos:?}");
-            println!(" >>> {result:?}");
-            result
-        },
-        |pos: &(usize, Bird)| {
-            if pos.0 >= walls.len() {
-                0
-            } else {
-                end - walls[pos.0].dist
-            }
-        },
-        |pos: &(usize, Bird)| pos.0 >= walls.len(),
-    );
-    println!("{answer:?}");
+    let game = Game::new(walls);
+    println!("Quest 19, part 1 = {}", game.find_path());
+}
+
+struct Game {
+    walls: Vec<Wall>,
+}
+
+impl Game {
+    fn new(walls: Vec<Wall>) -> Self {
+        Self { walls }
+    }
+
+    fn find_path(&self) -> usize {
+        let bird = Bird::new(0, 0);
+        aoclib::astar(
+            &(0, bird),
+            |pos: &(usize, Bird)| {
+                let dist = self.walls[pos.0].dist - pos.1.x;
+                if let Some(range) = pos.1.y_range(&self.walls[pos.0]) {
+                    (range.0..=range.1)
+                        .step_by(2)
+                        .map(|height| {
+                            let cost = pos.1.flaps_to(height, dist);
+                            let new_x = pos.1.x + dist;
+                            let new_y = height;
+                            ((pos.0 + 1, Bird::new(new_x, new_y)), cost)
+                        })
+                        .collect::<Vec<_>>()
+                } else {
+                    Vec::new()
+                }
+            },
+            |_| 1,
+            |pos: &(usize, Bird)| pos.0 >= self.walls.len(),
+        )
+        .unwrap()
+        .1
+    }
 }
 
 #[derive(Debug, Copy, Clone, Default, Eq, PartialEq, Hash)]
@@ -87,10 +90,7 @@ impl Bird {
     }
 
     fn flaps_to(&self, height: usize, dist: usize) -> usize {
-        // ch = current height
-        // dh = desired height
-        // min height = dist - self.x; max height = dist + self.x
-        dist + height.abs_diff(dist) / 2
+        dist - ((self.y + dist) - height) / 2
     }
 }
 
@@ -152,5 +152,16 @@ mod test {
         let bird = Bird::new(15, 5);
         let wall = Wall::make(24, 1, 6);
         assert_eq!(Some((2, 6)), bird.y_range(&wall));
+    }
+
+    #[test]
+    fn test_part_1() {
+        let data = aoclib::read_lines("test-input/part1");
+        let walls = data
+            .iter()
+            .map(|line| line.parse::<Wall>().unwrap())
+            .collect::<Vec<_>>();
+        let game = Game::new(walls);
+        assert_eq!(24, game.find_path());
     }
 }
