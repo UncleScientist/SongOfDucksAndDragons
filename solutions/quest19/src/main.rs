@@ -4,24 +4,32 @@
 // Idea 2:
 //  - For any given distance, there's a min and max height that can be reached
 
-use std::{convert::Infallible, str::FromStr};
+use std::{collections::HashMap, convert::Infallible, str::FromStr};
 
 fn main() {
     let data = aoclib::read_lines("input/everybody_codes_e2025_q19_p1.txt");
-    let walls = data
-        .iter()
-        .map(|line| line.parse::<Wall>().unwrap())
-        .collect::<Vec<_>>();
-    let game = Game::new(walls);
+    let game = Game::new(data);
     println!("Quest 19, part 1 = {}", game.find_path());
 }
 
 struct Game {
-    walls: Vec<Wall>,
+    walls: Vec<GapRange>,
 }
 
 impl Game {
-    fn new(walls: Vec<Wall>) -> Self {
+    fn new(wall_list: Vec<String>) -> Self {
+        let mut hm = HashMap::<usize, GapRange>::new();
+
+        for wall in wall_list {
+            let w = wall.parse::<Wall>().unwrap();
+            let entry = hm.entry(w.dist).or_default();
+            entry.dist = w.dist;
+            entry.gaps.push(Gap::new(w.bottom, w.opening));
+        }
+
+        let mut walls = hm.into_values().collect::<Vec<_>>();
+        walls.sort_by_key(|wall| wall.dist);
+
         Self { walls }
     }
 
@@ -31,19 +39,17 @@ impl Game {
             &(0, bird),
             |pos: &(usize, Bird)| {
                 let dist = self.walls[pos.0].dist - pos.1.x;
-                if let Some(range) = pos.1.y_range(&self.walls[pos.0]) {
-                    (range.0..=range.1)
-                        .step_by(2)
-                        .map(|height| {
-                            let cost = pos.1.flaps_to(height, dist);
-                            let new_x = pos.1.x + dist;
-                            let new_y = height;
-                            ((pos.0 + 1, Bird::new(new_x, new_y)), cost)
-                        })
-                        .collect::<Vec<_>>()
-                } else {
-                    Vec::new()
-                }
+                let highest = pos.1.y + dist;
+                let lowest = pos.1.y.saturating_sub(dist).parity(highest);
+                self.walls[pos.0]
+                    .iter(lowest, highest)
+                    .map(|height| {
+                        let cost = pos.1.flaps_to(height, dist);
+                        let new_x = pos.1.x + dist;
+                        let new_y = height;
+                        ((pos.0 + 1, Bird::new(new_x, new_y)), cost)
+                    })
+                    .collect::<Vec<_>>()
             },
             |_| 1,
             |pos: &(usize, Bird)| pos.0 >= self.walls.len(),
@@ -64,43 +70,25 @@ impl Bird {
         Self { x, y }
     }
 
-    fn y_range(&self, wall: &Wall) -> Option<(usize, usize)> {
-        let delta = wall.dist - self.x;
-        let min_y = self.y.saturating_sub(delta);
-        let max_y = self.y + delta;
-        if max_y < wall.bottom || min_y > wall.bottom + wall.opening {
-            None
-        } else {
-            let lower = if wall.dist.is_multiple_of(2) == wall.bottom.is_multiple_of(2) {
-                min_y.max(wall.bottom)
-            } else {
-                min_y.max(wall.bottom + 1)
-            };
-
-            let wall_top = wall.bottom + wall.opening - 1;
-            let upper = if wall.dist.is_multiple_of(2) == wall_top.is_multiple_of(2) {
-                max_y.min(wall_top)
-            } else {
-                max_y.min(wall_top - 1)
-            };
-
-            // assert!(lower <= upper);
-            Some((lower, upper))
-        }
-    }
-
     fn flaps_to(&self, height: usize, dist: usize) -> usize {
         dist - ((self.y + dist) - height) / 2
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct GapRange {
+    dist: usize,
     gaps: Vec<Gap>,
 }
 
 impl GapRange {
     fn iter(&self, lowest: usize, highest: usize) -> GapRangeIter<'_> {
+        let lowest = if lowest < self.gaps[0].bottom {
+            self.gaps[0].bottom
+                + (lowest.is_multiple_of(2) != self.gaps[0].bottom.is_multiple_of(2)) as usize
+        } else {
+            lowest
+        };
         GapRangeIter {
             gap_range: self,
             cur_index: 0,
@@ -140,6 +128,7 @@ impl Iterator for GapRangeIter<'_> {
     }
 }
 
+#[derive(Debug)]
 struct GapRangeIter<'a> {
     gap_range: &'a GapRange,
     cur_index: usize,
@@ -193,46 +182,35 @@ impl FromStr for Wall {
     }
 }
 
+trait AdjustParity {
+    fn parity(&self, alt: Self) -> Self;
+}
+
+impl AdjustParity for usize {
+    fn parity(&self, alt: Self) -> Self {
+        if self.is_multiple_of(2) != alt.is_multiple_of(2) {
+            self + 1
+        } else {
+            *self
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
 
     #[test]
-    fn test_odd_distance() {
-        let start = Bird::default();
-        let end = Wall::make(7, 7, 2);
-
-        assert_eq!(Some((7, 7)), start.y_range(&end));
-    }
-
-    #[test]
-    fn test_wall_ranges() {
-        let bird = Bird::new(7, 7);
-        let wall = Wall::make(12, 0, 4);
-        assert_eq!(Some((2, 2)), bird.y_range(&wall));
-    }
-
-    #[test]
-    fn test_wall_range_2() {
-        let bird = Bird::new(15, 5);
-        let wall = Wall::make(24, 1, 6);
-        assert_eq!(Some((2, 6)), bird.y_range(&wall));
-    }
-
-    #[test]
     fn test_part_1() {
         let data = aoclib::read_lines("test-input/part1");
-        let walls = data
-            .iter()
-            .map(|line| line.parse::<Wall>().unwrap())
-            .collect::<Vec<_>>();
-        let game = Game::new(walls);
+        let game = Game::new(data);
         assert_eq!(24, game.find_path());
     }
 
     #[test]
     fn test_gap_iter_even() {
         let range = GapRange {
+            dist: 1,
             gaps: vec![Gap::new(4, 8), Gap::new(15, 4), Gap::new(28, 12)],
         };
         let mut iter = range.iter(4, 32);
@@ -251,6 +229,7 @@ mod test {
     #[test]
     fn test_gap_iter_odd() {
         let range = GapRange {
+            dist: 1,
             gaps: vec![Gap::new(4, 8), Gap::new(15, 4), Gap::new(28, 12)],
         };
         let mut iter = range.iter(5, 33);
@@ -264,5 +243,12 @@ mod test {
         assert_eq!(Some(31), iter.next());
         assert_eq!(Some(33), iter.next());
         assert_eq!(None, iter.next());
+    }
+
+    #[test]
+    fn test_parity() {
+        assert_eq!(4, 3.parity(6));
+        assert_eq!(17, 17.parity(15));
+        assert_eq!(17, 16.parity(95));
     }
 }
