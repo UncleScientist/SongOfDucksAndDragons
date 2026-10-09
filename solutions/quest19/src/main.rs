@@ -92,8 +92,7 @@ struct GapRange {
 impl GapRange {
     fn iter(&self, lowest: usize, highest: usize) -> GapRangeIter<'_> {
         let lowest = if lowest < self.gaps[0].bottom {
-            self.gaps[0].bottom
-                + (lowest.is_multiple_of(2) != self.gaps[0].bottom.is_multiple_of(2)) as usize
+            self.gaps[0].bottom.parity(lowest)
         } else {
             lowest
         };
@@ -122,12 +121,7 @@ impl Iterator for GapRangeIter<'_> {
             {
                 self.cur_index += 1;
                 if self.cur_index < self.gap_range.gaps.len() {
-                    let next_val = self.gap_range.gaps[self.cur_index].bottom;
-                    self.next_val = if next_val.is_multiple_of(2) != val.is_multiple_of(2) {
-                        next_val + 1
-                    } else {
-                        next_val
-                    }
+                    self.next_val = self.gap_range.gaps[self.cur_index].bottom.parity(val);
                 }
             }
 
