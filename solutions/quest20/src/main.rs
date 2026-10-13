@@ -4,27 +4,54 @@ fn main() {
     let data = aoclib::read_lines("input/everybody_codes_e2025_q20_p1.txt");
     let game = Game::new(data);
     println!("Quest 20, part 1 = {}", game.count_jumps());
+
+    let data = aoclib::read_lines("input/everybody_codes_e2025_q20_p2.txt");
+    let game = Game::new(data);
+    println!("Quest 20, part 2 = {}", game.count_path());
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 enum Triangle {
     Trampoline,
+    Start,
+    End,
     Empty,
+}
+
+impl Triangle {
+    fn can_jump_to(&self) -> bool {
+        !matches!(self, Self::Empty)
+    }
 }
 
 #[derive(Debug)]
 struct Game {
     grid: Vec<Vec<Triangle>>,
+    start: Point,
+    end: Point,
 }
 
 impl Game {
     fn new(data: Vec<String>) -> Self {
-        Self {
-            grid: data
-                .iter()
-                .map(|line| line.chars().map(Into::<Triangle>::into).collect())
-                .collect(),
+        let mut grid = Vec::new();
+        let mut start = Point::new(0, 0);
+        let mut end = Point::new(0, 0);
+
+        for (r, line) in data.iter().enumerate() {
+            let mut row = Vec::new();
+            for (c, ch) in line.chars().enumerate() {
+                let item: Triangle = ch.into();
+                row.push(item);
+                match item {
+                    Triangle::Start => start = Point::new(r, c),
+                    Triangle::End => end = Point::new(r, c),
+                    _ => {}
+                }
+            }
+            grid.push(row);
         }
+
+        Self { grid, start, end }
     }
 
     fn count_jumps(&self) -> usize {
@@ -32,7 +59,7 @@ impl Game {
 
         for row in 0..self.grid.len() {
             for col in 0..self.grid[row].len() {
-                if self.grid[row][col] == Triangle::Trampoline {
+                if self.grid[row][col].can_jump_to() {
                     let from = Point::new(row, col);
                     hs.extend(self.jumps(from).iter().map(|to| PointPair::new(from, *to)));
                 }
@@ -40,6 +67,16 @@ impl Game {
         }
 
         hs.len()
+    }
+
+    fn count_path(&self) -> usize {
+        aoclib::ucs(
+            &self.start,
+            |point: &Point| self.jumps(*point).into_iter().map(|loc| (loc, 1)).collect(),
+            |point: &Point| *point == self.end,
+        )
+        .unwrap()
+        .1
     }
 
     fn jumps(&self, pos: Point) -> Vec<Point> {
@@ -51,24 +88,22 @@ impl Game {
         let can_go_down = is_even_row != is_even_col;
         let can_go_up = is_even_row == is_even_col;
 
-        if pos.row > 0 && can_go_up && self.grid[pos.row - 1][pos.col] == Triangle::Trampoline {
+        if pos.row > 0 && can_go_up && self.grid[pos.row - 1][pos.col].can_jump_to() {
             result.push(pos.up());
         }
 
         if pos.row < self.grid.len() - 1
             && can_go_down
-            && self.grid[pos.row + 1][pos.col] == Triangle::Trampoline
+            && self.grid[pos.row + 1][pos.col].can_jump_to()
         {
             result.push(pos.down());
         }
 
-        if pos.col > 0 && self.grid[pos.row][pos.col - 1] == Triangle::Trampoline {
+        if pos.col > 0 && self.grid[pos.row][pos.col - 1].can_jump_to() {
             result.push(pos.left());
         }
 
-        if pos.col < self.grid[pos.row].len() - 1
-            && self.grid[pos.row][pos.col + 1] == Triangle::Trampoline
-        {
+        if pos.col < self.grid[pos.row].len() - 1 && self.grid[pos.row][pos.col + 1].can_jump_to() {
             result.push(pos.right());
         }
 
@@ -81,6 +116,8 @@ impl From<char> for Triangle {
         match value {
             '#' | '.' => Self::Empty,
             'T' => Self::Trampoline,
+            'S' => Self::Start,
+            'E' => Self::End,
             _ => panic!("invalid char '{value}'"),
         }
     }
@@ -181,5 +218,12 @@ mod test {
         let data = aoclib::read_lines("test-input/part1");
         let game = Game::new(data);
         assert_eq!(7, game.count_jumps());
+    }
+
+    #[test]
+    fn test_part_2() {
+        let data = aoclib::read_lines("test-input/part2");
+        let game = Game::new(data);
+        assert_eq!(32, game.count_path());
     }
 }
