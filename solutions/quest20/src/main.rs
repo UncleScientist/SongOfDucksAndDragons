@@ -1,4 +1,4 @@
-use std::{collections::HashSet, convert::Into};
+use std::{collections::HashSet, convert::Into, ops::Index};
 
 fn main() {
     let data = aoclib::read_lines("input/everybody_codes_e2025_q20_p1.txt");
@@ -8,9 +8,13 @@ fn main() {
     let data = aoclib::read_lines("input/everybody_codes_e2025_q20_p2.txt");
     let game = Game::new(data);
     println!("Quest 20, part 2 = {}", game.count_path());
+
+    let data = aoclib::read_lines("input/everybody_codes_e2025_q20_p3.txt");
+    let game = Game::new(data);
+    println!("Quest 20, part 3 = {}", game.count_bouncy_path());
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum Triangle {
     Trampoline,
     Start,
@@ -24,16 +28,72 @@ impl Triangle {
     }
 }
 
+#[derive(Debug, Default, PartialEq, Eq)]
+struct Grid(Vec<Vec<Triangle>>);
+
+impl Grid {
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    fn rotate(&self) -> Self {
+        let mut grid = Vec::new();
+        let width = self[0].len();
+        let mut startcol = width / 2;
+        let mut startrow = self.len() - 1;
+
+        loop {
+            let mut cur_col = startcol;
+            let mut cur_row = startrow;
+            let mut going_up = true;
+            let mut grid_row = Vec::new();
+
+            grid_row.extend(vec![Triangle::Empty; startcol - (width / 2)]);
+            loop {
+                grid_row.push(self[cur_row][cur_col]);
+                if going_up {
+                    if cur_row == 0 {
+                        break;
+                    }
+                    cur_row -= 1;
+                    going_up = false;
+                } else {
+                    cur_col -= 1;
+                    going_up = true;
+                }
+            }
+            grid_row.extend(vec![Triangle::Empty; startcol - (width / 2)]);
+            grid.push(grid_row);
+
+            if startrow == 0 {
+                break;
+            }
+            startrow -= 1;
+            startcol += 1;
+        }
+
+        Self(grid)
+    }
+}
+
+impl Index<usize> for Grid {
+    type Output = Vec<Triangle>;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
 #[derive(Debug)]
 struct Game {
-    grid: Vec<Vec<Triangle>>,
+    grid: Grid,
     start: Point,
     end: Point,
 }
 
 impl Game {
     fn new(data: Vec<String>) -> Self {
-        let mut grid = Vec::new();
+        let mut grid = Grid::default();
         let mut start = Point::new(0, 0);
         let mut end = Point::new(0, 0);
 
@@ -48,7 +108,7 @@ impl Game {
                     _ => {}
                 }
             }
-            grid.push(row);
+            grid.0.push(row);
         }
 
         Self { grid, start, end }
@@ -79,8 +139,36 @@ impl Game {
         .1
     }
 
+    fn count_bouncy_path(&self) -> usize {
+        let r1 = self.grid.rotate();
+        let r2 = r1.rotate();
+
+        let rotating_grid = [&self.grid, &r1, &r2];
+
+        aoclib::ucs(
+            &(1, self.start),
+            |(idx, point): &(usize, Point)| {
+                Self::jumps_for_grid(*point, rotating_grid[*idx], true)
+                    .into_iter()
+                    .map(|loc| (((idx + 1) % 3, loc), 1))
+                    .collect()
+            },
+            |point: &(usize, Point)| point.1 == self.end,
+        )
+        .unwrap()
+        .1
+    }
+
     fn jumps(&self, pos: Point) -> Vec<Point> {
-        let mut result = Vec::new();
+        Self::jumps_for_grid(pos, &self.grid, false)
+    }
+
+    fn jumps_for_grid(pos: Point, grid: &Grid, jump_in_place: bool) -> Vec<Point> {
+        let mut result = if jump_in_place && grid[pos.row][pos.col].can_jump_to() {
+            vec![pos]
+        } else {
+            Vec::new()
+        };
 
         let is_even_row = pos.row.is_multiple_of(2);
         let is_even_col = pos.col.is_multiple_of(2);
@@ -88,22 +176,19 @@ impl Game {
         let can_go_down = is_even_row != is_even_col;
         let can_go_up = is_even_row == is_even_col;
 
-        if pos.row > 0 && can_go_up && self.grid[pos.row - 1][pos.col].can_jump_to() {
+        if pos.row > 0 && can_go_up && grid[pos.row - 1][pos.col].can_jump_to() {
             result.push(pos.up());
         }
 
-        if pos.row < self.grid.len() - 1
-            && can_go_down
-            && self.grid[pos.row + 1][pos.col].can_jump_to()
-        {
+        if pos.row < grid.len() - 1 && can_go_down && grid[pos.row + 1][pos.col].can_jump_to() {
             result.push(pos.down());
         }
 
-        if pos.col > 0 && self.grid[pos.row][pos.col - 1].can_jump_to() {
+        if pos.col > 0 && grid[pos.row][pos.col - 1].can_jump_to() {
             result.push(pos.left());
         }
 
-        if pos.col < self.grid[pos.row].len() - 1 && self.grid[pos.row][pos.col + 1].can_jump_to() {
+        if pos.col < grid[pos.row].len() - 1 && grid[pos.row][pos.col + 1].can_jump_to() {
             result.push(pos.right());
         }
 
@@ -225,5 +310,24 @@ mod test {
         let data = aoclib::read_lines("test-input/part2");
         let game = Game::new(data);
         assert_eq!(32, game.count_path());
+    }
+
+    #[test]
+    fn test_rotation() {
+        let data = aoclib::read_lines("test-input/part3");
+        let game = Game::new(data);
+        let rotated_grid = game.grid.rotate();
+
+        let rotated_data = aoclib::read_lines("test-input/part3.rotate1");
+        let rotated_game = Game::new(rotated_data);
+
+        assert_eq!(rotated_game.grid, rotated_grid);
+    }
+
+    #[test]
+    fn test_part_3() {
+        let data = aoclib::read_lines("test-input/part3");
+        let game = Game::new(data);
+        assert_eq!(23, game.count_bouncy_path());
     }
 }
